@@ -1,11 +1,21 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Clock, Briefcase, IndianRupee, Calendar, 
-  CheckCircle2, UserCheck, ArrowRight, Wallet, Download,
-  Plane, XCircle, FileText
-} from 'lucide-react';
+import {
+  ShieldAlert,
+  Clock,
+  Briefcase,
+  IndianRupee,
+  Calendar,
+  CheckCircle2,
+  UserCheck,
+  ArrowRight,
+  Wallet,
+  Download,
+  Plane,
+  XCircle,
+  FileText
+} from 'lucide-react';;
 import { exportToCSV } from '@/lib/exportCsv';
 
 export default function HRPayroll() {
@@ -178,3 +188,4 @@ export default function HRPayroll() {
     </div>
   );
 }
+

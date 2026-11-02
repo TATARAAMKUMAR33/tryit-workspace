@@ -18,13 +18,8 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchStats(); // Initial fetch
-    
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchStats();
-    }, 30000);
-
+    fetchStats();
+    const interval = setInterval(() => fetchStats(), 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -39,7 +34,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-10 max-w-7xl mx-auto">
-      <div className="opacity-0 animate-fade-up">
+      <div>
         <h1 className="text-4xl font-bold tracking-tight mb-2 text-[var(--foreground)]">
           Welcome back, <span className="bg-gradient-to-r from-blue-500 to-purple-500 bg-clip-text text-transparent">Admin</span>
         </h1>
@@ -48,7 +43,7 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {cards.map((card, i) => (
-          <div key={i} className={`bg-[var(--card-bg)] backdrop-blur-xl p-6 rounded-[1.5rem] border border-[var(--card-border)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${card.border} opacity-0 animate-fade-up delay-${i+1}`}>
+          <div key={i} className={`bg-white p-6 rounded-[1.5rem] border border-[var(--card-border)] transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${card.border}`}>
             <div className="flex items-center justify-between mb-4">
               <div className={`p-3 rounded-2xl ${card.bg} ${card.color}`}><card.icon size={24} /></div>
             </div>
@@ -60,20 +55,20 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--card-border)] rounded-[1.5rem] p-8 opacity-0 animate-fade-up delay-4">
+      <div className="bg-white border border-[var(--card-border)] rounded-[1.5rem] p-8">
         <h3 className="text-xl font-semibold mb-6 flex items-center gap-2 text-[var(--foreground)]">
           <Activity size={20} className="text-blue-500" /> System Infrastructure
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="flex items-center gap-4 bg-[var(--background)] p-4 rounded-2xl border border-[var(--card-border)]">
+          <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-[var(--card-border)]">
             <div className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span></div>
             <div><p className="text-xs text-gray-500 font-medium">GitHub Generator</p><p className="font-semibold text-sm text-[var(--foreground)]">Running (Hourly)</p></div>
           </div>
-          <div className="flex items-center gap-4 bg-[var(--background)] p-4 rounded-2xl border border-[var(--card-border)]">
+          <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-[var(--card-border)]">
             <div className="h-3 w-3 bg-green-500 rounded-full"></div>
             <div><p className="text-xs text-gray-500 font-medium">Supabase Database</p><p className="font-semibold text-sm text-[var(--foreground)]">Connected</p></div>
           </div>
-          <div className="flex items-center gap-4 bg-[var(--background)] p-4 rounded-2xl border border-[var(--card-border)]">
+          <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-2xl border border-[var(--card-border)]">
             <div className="h-3 w-3 bg-yellow-500 rounded-full animate-pulse"></div>
             <div><p className="text-xs text-gray-500 font-medium">AWS Bedrock</p><p className="font-semibold text-sm text-[var(--foreground)]">Auth Hold Pending</p></div>
           </div>

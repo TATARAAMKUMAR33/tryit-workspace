@@ -1,10 +1,16 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  ShieldAlert, ShieldX, Trash2, Search, 
-  RefreshCw, AlertOctagon, Globe, CheckCircle2
-} from 'lucide-react';
+import {
+  ShieldAlert,
+  ShieldX,
+  Trash2,
+  Search,
+  RefreshCw,
+  AlertOctagon,
+  Globe,
+  CheckCircle2
+} from 'lucide-react';;
 
 export default function SecurityCenter() {
   const [activeTab, setActiveTab] = useState<'privacy' | 'ip'>('privacy');
@@ -193,3 +199,4 @@ export default function SecurityCenter() {
     </div>
   );
 }
+

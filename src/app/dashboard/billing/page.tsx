@@ -1,7 +1,18 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { CreditCard, Plus, FileText, CheckCircle2, Clock, AlertCircle, IndianRupee, X, Download, Search } from 'lucide-react';
+import {
+  CreditCard,
+  Plus,
+  FileText,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  IndianRupee,
+  X,
+  Download,
+  Search
+} from 'lucide-react';;
 import { exportToCSV } from '@/lib/exportCsv';
 
 type InvoiceType = {
@@ -218,4 +229,5 @@ export default function BillingHub() {
     </div>
   );
 }
+
 
