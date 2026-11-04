@@ -1,188 +1,179 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Trophy, Award, Medal, Star, RefreshCw, 
-  CheckCircle2, Ticket, CheckSquare, Zap
-} from 'lucide-react';
+import { BarChart2, RefreshCw, TrendingUp, TrendingDown, Award, Target } from 'lucide-react';
 
-export default function StaffLeaderboard() {
-  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+export default function StaffKPI() {
+  const [scorecards, setScorecards] = useState<any[]>([]);
+  const [badges, setBadges] = useState<any[]>([]);
+  const [wellbeing, setWellbeing] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('scorecards');
 
-  const fetchPerformance = async () => {
+  const fetchData = async () => {
     setLoading(true);
-
-    // 1. Get all staff
-    const { data: staff } = await supabase.from('staff_roles').select('user_email, role');
-    if (!staff) return;
-
-    // 2. Fetch all completed tasks, resolved tickets, and reviewed questions in parallel
-    const [tasksRes, ticketsRes, qaRes] = await Promise.all([
-      supabase.from('tasks').select('assigned_to').eq('status', 'done'),
-      supabase.from('tickets').select('assigned_to').eq('status', 'resolved'),
-      supabase.from('questions').select('reviewed_by').not('reviewed_by', 'is', null)
+    const [s, b, w] = await Promise.all([
+      supabase.from('staff_scorecards').select('*'),
+      supabase.from('staff_badges').select('*').order('earned_at', { ascending: false }).limit(50),
+      supabase.from('staff_wellbeing').select('*').order('submitted_at', { ascending: false }).limit(30),
     ]);
-
-    const completedTasks = tasksRes.data || [];
-    const resolvedTickets = ticketsRes.data || [];
-    const reviewedQA = qaRes.data || [];
-
-    // 3. Calculate scores for each staff member
-    const performanceData = staff.map(member => {
-      const email = member.user_email;
-      
-      const tasksDone = completedTasks.filter(t => t.assigned_to === email).length;
-      const ticketsSolved = resolvedTickets.filter(t => t.assigned_to === email).length;
-      const questionsChecked = reviewedQA.filter(q => q.reviewed_by === email).length;
-
-      // Weighted scoring system
-      const totalScore = (tasksDone * 10) + (ticketsSolved * 15) + (questionsChecked * 5);
-
-      return {
-        email,
-        role: member.role,
-        tasksDone,
-        ticketsSolved,
-        questionsChecked,
-        totalScore
-      };
-    });
-
-    // 4. Sort by highest score
-    performanceData.sort((a, b) => b.totalScore - a.totalScore);
-    setLeaderboard(performanceData);
+    if (s.data) setScorecards(s.data);
+    if (b.data) setBadges(b.data);
+    if (w.data) setWellbeing(w.data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchPerformance();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  const getRankIcon = (index: number) => {
-    if (index === 0) return <Trophy className="text-yellow-500 animate-bounce" size={32} />;
-    if (index === 1) return <Medal className="text-gray-400" size={28} />;
-    if (index === 2) return <Award className="text-orange-500" size={28} />;
-    return <span className="text-gray-500 font-bold text-xl">{index + 1}</span>;
-  };
+  const getBadgesForUser = (email: string) => badges.filter(b => b.user_email === email);
+  const getWellbeingForUser = (email: string) => wellbeing.filter(w => w.user_email === email);
 
-  const getPodiumStyle = (index: number) => {
-    if (index === 0) return 'bg-gradient-to-t from-yellow-500/20 to-transparent border-yellow-500/50 shadow-[0_0_30px_rgba(234,179,8,0.2)] transform md:-translate-y-4';
-    if (index === 1) return 'bg-gradient-to-t from-gray-500/20 to-transparent border-gray-400/50';
-    if (index === 2) return 'bg-gradient-to-t from-orange-500/20 to-transparent border-orange-500/50';
-    return 'bg-[var(--card-bg)] border-[var(--card-border)]';
-  };
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-cyan-500" size={40}/></div>;
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
-
-  const top3 = leaderboard.slice(0, 3);
-  const rest = leaderboard.slice(3);
+  const activeStaff = scorecards.filter(s => s.is_active);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-10 animate-fade-up">
-      
-      {/* Header */}
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <Trophy className="text-yellow-500" size={32} /> Staff Leaderboard
-          </h1>
-          <p className="text-gray-500">Gamified performance tracking for the TryIT team.</p>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><BarChart2 className="text-cyan-600" size={32}/> Staff KPI Dashboard</h1>
+          <p className="text-gray-500">{activeStaff.length} active staff members being tracked</p>
         </div>
-        <button onClick={fetchPerformance} className="p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl hover:bg-gray-500/10 text-gray-500 transition-colors">
-          <RefreshCw size={20} />
+        <button onClick={fetchData} className="p-2.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-gray-500">
+          <RefreshCw size={20} className={loading ? 'animate-spin' : ''}/>
         </button>
       </div>
 
-      {/* Top 3 Podium */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end mt-12 mb-8">
-        {/* Rank 2 */}
-        {top3[1] && (
-          <div className={`border-2 rounded-3xl p-6 text-center order-1 md:order-1 ${getPodiumStyle(1)}`}>
-            <div className="w-16 h-16 mx-auto bg-gray-800 rounded-full flex items-center justify-center border-4 border-gray-500 mb-4 shadow-lg">
-              {getRankIcon(1)}
-            </div>
-            <h3 className="font-bold text-lg text-[var(--foreground)]">{top3[1].email.split('@')[0]}</h3>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{top3[1].role.replace('_', ' ')}</p>
-            <div className="text-3xl font-black text-[var(--foreground)]">{top3[1].totalScore} <span className="text-sm text-gray-500">pts</span></div>
-          </div>
-        )}
-
-        {/* Rank 1 */}
-        {top3[0] && (
-          <div className={`border-2 rounded-3xl p-8 text-center order-2 md:order-2 z-10 ${getPodiumStyle(0)}`}>
-            <div className="w-20 h-20 mx-auto bg-yellow-900/30 rounded-full flex items-center justify-center border-4 border-yellow-500 mb-4 shadow-xl">
-              {getRankIcon(0)}
-            </div>
-            <h3 className="font-black text-2xl text-[var(--foreground)]">{top3[0].email.split('@')[0]}</h3>
-            <p className="text-xs font-bold text-yellow-500 uppercase tracking-widest mb-2">{top3[0].role.replace('_', ' ')}</p>
-            <div className="text-4xl font-black text-yellow-500">{top3[0].totalScore} <span className="text-sm text-gray-500">pts</span></div>
-          </div>
-        )}
-
-        {/* Rank 3 */}
-        {top3[2] && (
-          <div className={`border-2 rounded-3xl p-6 text-center order-3 md:order-3 ${getPodiumStyle(2)}`}>
-            <div className="w-16 h-16 mx-auto bg-orange-900/30 rounded-full flex items-center justify-center border-4 border-orange-500 mb-4 shadow-lg">
-              {getRankIcon(2)}
-            </div>
-            <h3 className="font-bold text-lg text-[var(--foreground)]">{top3[2].email.split('@')[0]}</h3>
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">{top3[2].role.replace('_', ' ')}</p>
-            <div className="text-3xl font-black text-[var(--foreground)]">{top3[2].totalScore} <span className="text-sm text-gray-500">pts</span></div>
-          </div>
-        )}
+      <div className="flex gap-2">
+        {[
+          { id: 'scorecards', label: 'Scorecards' },
+          { id: 'badges', label: 'Badges' },
+          { id: 'wellbeing', label: 'Wellbeing' },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === tab.id ? 'bg-cyan-500 text-white' : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-gray-500'}`}>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Full Leaderboard Table */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-xl">
-        <div className="p-6 border-b border-[var(--card-border)] bg-[var(--background)]/50">
-          <h2 className="text-xl font-bold flex items-center gap-2"><Star className="text-blue-500"/> Remaining Staff Metrics</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[var(--background)] text-gray-500 text-xs uppercase tracking-wider">
-                <th className="p-5 font-semibold w-16 text-center">Rank</th>
-                <th className="p-5 font-semibold">Employee</th>
-                <th className="p-5 font-semibold text-center"><CheckSquare size={14} className="inline mr-1"/> QA Checked</th>
-                <th className="p-5 font-semibold text-center"><Ticket size={14} className="inline mr-1"/> Tickets Solved</th>
-                <th className="p-5 font-semibold text-center"><CheckCircle2 size={14} className="inline mr-1"/> Tasks Done</th>
-                <th className="p-5 font-semibold text-right">Total Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--card-border)]">
-              {rest.map((emp, idx) => (
-                <tr key={emp.email} className="hover:bg-[var(--background)]/30 transition-colors">
-                  <td className="p-5 flex justify-center text-gray-500 font-bold">{idx + 4}</td>
-                  <td className="p-5">
-                    <p className="font-bold text-[var(--foreground)]">{emp.email}</p>
-                    <p className="text-xs text-gray-500 uppercase tracking-wider">{emp.role.replace('_', ' ')}</p>
-                  </td>
-                  <td className="p-5 text-center font-mono text-lg">{emp.questionsChecked}</td>
-                  <td className="p-5 text-center font-mono text-lg">{emp.ticketsSolved}</td>
-                  <td className="p-5 text-center font-mono text-lg">{emp.tasksDone}</td>
-                  <td className="p-5 text-right">
-                    <span className="bg-blue-500/10 text-blue-500 font-bold px-3 py-1 rounded-xl text-lg">{emp.totalScore}</span>
-                  </td>
-                </tr>
-              ))}
-              {rest.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-500 italic">Not enough staff data to fill the leaderboard yet.</td>
-                </tr>
+      {activeTab === 'scorecards' && (
+        <div className="space-y-3">
+          {activeStaff.length === 0 ? (
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-12 text-center">
+              <Target size={40} className="text-gray-300 mx-auto mb-3"/>
+              <p className="font-bold">No scorecard data yet</p>
+              <p className="text-gray-500 text-sm">Data populates as staff resolve tickets and complete tasks</p>
+            </div>
+          ) : activeStaff.sort((a, b) => b.tickets_this_week - a.tickets_this_week).map((staff, idx) => (
+            <div key={staff.user_email} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-4">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-black text-lg ${
+                    idx === 0 ? 'bg-yellow-500 text-black' :
+                    idx === 1 ? 'bg-gray-400 text-black' :
+                    idx === 2 ? 'bg-amber-600 text-white' :
+                    'bg-blue-500/10 text-blue-500'
+                  }`}>
+                    {idx < 3 ? ['🥇','🥈','🥉'][idx] : idx + 1}
+                  </div>
+                  <div>
+                    <p className="font-bold">{staff.user_email.split('@')[0]}</p>
+                    <p className="text-xs text-gray-500 capitalize">{staff.role.replace('_', ' ')}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    {getBadgesForUser(staff.user_email).slice(0, 3).map(b => (
+                      <span key={b.id} title={b.badge_name} className="text-lg">{b.badge_icon}</span>
+                    ))}
+                  </div>
+                </div>
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${staff.rank_in_team === 1 ? 'bg-yellow-500/10 text-yellow-600' : 'bg-gray-500/10 text-gray-500'}`}>
+                  Rank #{staff.rank_in_team} in team
+                </span>
+              </div>
+
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { label: 'Today', value: staff.tickets_today, icon: TrendingUp, color: 'text-green-500' },
+                  { label: 'This Week', value: staff.tickets_this_week, icon: BarChart2, color: 'text-blue-500' },
+                  { label: 'SLA Breaches', value: staff.sla_breaches, icon: TrendingDown, color: staff.sla_breaches === 0 ? 'text-green-500' : 'text-red-500' },
+                  { label: 'Team Rank', value: `#${staff.rank_in_team}`, icon: Award, color: staff.rank_in_team === 1 ? 'text-yellow-500' : 'text-blue-500' },
+                ].map(metric => (
+                  <div key={metric.label} className="bg-[var(--background)] rounded-xl p-3 text-center">
+                    <metric.icon size={16} className={`${metric.color} mx-auto mb-1`}/>
+                    <div className={`text-xl font-black ${metric.color}`}>{metric.value}</div>
+                    <div className="text-[10px] text-gray-500 uppercase tracking-wider">{metric.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {getWellbeingForUser(staff.user_email)[0] && (
+                <div className="mt-3 flex items-center gap-3 bg-[var(--background)] rounded-xl p-3">
+                  <span className="text-xs text-gray-500">Wellbeing this week:</span>
+                  <div className="flex gap-1">
+                    {[1,2,3,4,5].map(n => (
+                      <div key={n} className={`w-4 h-4 rounded-full ${n <= (getWellbeingForUser(staff.user_email)[0]?.mood_score || 0) ? 'bg-green-500' : 'bg-gray-200'}`}/>
+                    ))}
+                  </div>
+                  {getWellbeingForUser(staff.user_email)[0]?.win && (
+                    <span className="text-xs text-gray-500 italic">"{getWellbeingForUser(staff.user_email)[0].win}"</span>
+                  )}
+                </div>
               )}
-            </tbody>
-          </table>
+            </div>
+          ))}
         </div>
-      </div>
+      )}
 
-      {/* Scoring Legend */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6 flex flex-wrap gap-6 items-center justify-center text-sm font-medium text-gray-500 shadow-sm">
-        <div className="flex items-center gap-2"><Zap className="text-yellow-500" size={16} /> Ticket Resolved = <span className="text-[var(--foreground)] font-bold">15 pts</span></div>
-        <div className="flex items-center gap-2"><Zap className="text-purple-500" size={16} /> Task Completed = <span className="text-[var(--foreground)] font-bold">10 pts</span></div>
-        <div className="flex items-center gap-2"><Zap className="text-blue-500" size={16} /> QA Approved = <span className="text-[var(--foreground)] font-bold">5 pts</span></div>
-      </div>
+      {activeTab === 'badges' && (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+          <h2 className="font-bold mb-4 flex items-center gap-2"><Award size={18} className="text-yellow-500"/> Recently Earned Badges</h2>
+          {badges.length === 0 ? (
+            <p className="text-gray-500 text-sm">No badges earned yet. Badges auto-award as staff hit milestones.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {badges.map(badge => (
+                <div key={badge.id} className="flex items-center gap-4 bg-[var(--background)] rounded-xl p-4">
+                  <span className="text-3xl">{badge.badge_icon}</span>
+                  <div>
+                    <p className="font-bold">{badge.badge_name}</p>
+                    <p className="text-xs text-gray-500">{badge.user_email.split('@')[0]} · {badge.badge_description}</p>
+                    <p className="text-xs text-gray-400">{new Date(badge.earned_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
+      {activeTab === 'wellbeing' && (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+          <h2 className="font-bold mb-4">Weekly Wellbeing Check-ins</h2>
+          {wellbeing.length === 0 ? (
+            <p className="text-gray-500 text-sm">No wellbeing submissions yet. Staff submit via their profile page.</p>
+          ) : wellbeing.map(w => (
+            <div key={w.id} className="flex items-center justify-between p-3 bg-[var(--background)] rounded-xl mb-2">
+              <div>
+                <p className="font-bold text-sm">{w.user_email.split('@')[0]}</p>
+                <p className="text-xs text-gray-500">Week of {w.week_of}</p>
+                {w.win && <p className="text-xs text-green-500 mt-1">Win: "{w.win}"</p>}
+                {w.blocker && <p className="text-xs text-red-400 mt-1">Blocker: "{w.blocker}"</p>}
+              </div>
+              <div className="flex gap-4 text-center">
+                <div>
+                  <div className="text-lg font-black text-blue-500">{w.mood_score}/5</div>
+                  <div className="text-[10px] text-gray-500">Mood</div>
+                </div>
+                <div>
+                  <div className="text-lg font-black text-purple-500">{w.workload_feeling}/5</div>
+                  <div className="text-[10px] text-gray-500">Workload</div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

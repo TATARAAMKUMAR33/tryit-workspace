@@ -1,175 +1,169 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BookOpen, Plus, Save, FileText, ChevronRight, Edit3, X } from 'lucide-react';
-
-type ArticleType = {
-  id: string;
-  title: string;
-  category: string;
-  content: string;
-  author_email: string;
-  created_at: string;
-};
+import { BookOpen, Plus, Search, Edit2, Trash2, RefreshCw, Eye } from 'lucide-react';
 
 export default function KnowledgeBase() {
-  const [articles, setArticles] = useState<ArticleType[]>([]);
-  const [activeArticle, setActiveArticle] = useState<ArticleType | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
-  
-  // Form State
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('General SOP');
-  const [content, setContent] = useState('');
+  const [articles, setArticles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+  const [editing, setEditing] = useState<any | null>(null);
+  const [viewing, setViewing] = useState<any | null>(null);
+  const [form, setForm] = useState({ title: '', content: '', category: 'general', tags: '' });
+  const user = localStorage.getItem('tryit_user') || '';
 
   const fetchArticles = async () => {
+    setLoading(true);
     const { data } = await supabase.from('knowledge_base').select('*').order('created_at', { ascending: false });
     if (data) setArticles(data);
+    setLoading(false);
   };
 
-  useEffect(() => {
-    fetchArticles();
-  }, []);
+  useEffect(() => { fetchArticles(); }, []);
 
-  const handleCreateNew = () => {
-    setActiveArticle(null);
-    setTitle('');
-    setCategory('General SOP');
-    setContent('');
-    setIsEditing(true);
-  };
-
-  const handleEdit = (article: ArticleType) => {
-    setActiveArticle(article);
-    setTitle(article.title);
-    setCategory(article.category);
-    setContent(article.content);
-    setIsEditing(true);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
+  const saveArticle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
-
-    const userEmail = localStorage.getItem('tryit_user') || 'tatu.ind@hotmail.com';
-
-    if (activeArticle) {
-      // Update existing
-      await supabase.from('knowledge_base').update({ title, category, content }).eq('id', activeArticle.id);
+    const payload = { ...form, tags: form.tags.split(',').map(t => t.trim()), author: user };
+    if (editing) {
+      await supabase.from('knowledge_base').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editing.id);
     } else {
-      // Create new
-      await supabase.from('knowledge_base').insert([{ title, category, content, author_email: userEmail }]);
+      await supabase.from('knowledge_base').insert([payload]);
     }
-    
-    setIsEditing(false);
+    setForm({ title: '', content: '', category: 'general', tags: '' });
+    setEditing(null);
     fetchArticles();
   };
+
+  const deleteArticle = async (id: string) => {
+    if (!confirm('Delete this article?')) return;
+    await supabase.from('knowledge_base').delete().eq('id', id);
+    fetchArticles();
+  };
+
+  const startEdit = (article: any) => {
+    setEditing(article);
+    setForm({ title: article.title, content: article.content, category: article.category || 'general', tags: Array.isArray(article.tags) ? article.tags.join(', ') : '' });
+    setViewing(null);
+  };
+
+  const categories = ['all', ...new Set(articles.map(a => a.category || 'general').filter(Boolean))];
+  const filtered = articles.filter(a => {
+    const matchSearch = !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.content?.toLowerCase().includes(search.toLowerCase());
+    const matchCat = category === 'all' || (a.category || 'general') === category;
+    return matchSearch && matchCat;
+  });
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-yellow-500" size={40}/></div>;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-2xl animate-fade-up">
-      
-      {/* Sidebar (Article List) */}
-      <div className="w-80 bg-[var(--background)] border-r border-[var(--card-border)] flex flex-col">
-        <div className="p-4 border-b border-[var(--card-border)] flex justify-between items-center">
-          <h2 className="font-bold text-lg flex items-center gap-2 text-[var(--foreground)]">
-            <BookOpen className="text-blue-500" size={20} /> Knowledge Base
-          </h2>
-          <button onClick={handleCreateNew} className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">
-            <Plus size={16} />
-          </button>
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><BookOpen className="text-yellow-600" size={32}/> Knowledge Base</h1>
+          <p className="text-gray-500">{articles.length} articles · Internal SOPs and guides</p>
         </div>
-        
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {articles.length === 0 ? (
-            <p className="text-sm text-gray-500 italic p-4 text-center">No documents yet. Click + to create one.</p>
-          ) : (
-            articles.map(article => (
-              <div 
-                key={article.id} 
-                onClick={() => { setActiveArticle(article); setIsEditing(false); }}
-                className={`p-3 rounded-xl cursor-pointer transition-colors group ${
-                  activeArticle?.id === article.id ? 'bg-blue-500/10 border border-blue-500/20' : 'hover:bg-[var(--card-bg)] border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <FileText size={14} className={activeArticle?.id === article.id ? 'text-blue-500' : 'text-gray-500'} />
-                  <p className={`text-sm font-bold line-clamp-1 ${activeArticle?.id === article.id ? 'text-blue-500' : 'text-[var(--foreground)]'}`}>{article.title}</p>
-                </div>
-                <p className="text-xs text-gray-500 line-clamp-1">{article.category}</p>
-              </div>
-            ))
-          )}
-        </div>
+        <button onClick={() => { setEditing(null); setForm({ title: '', content: '', category: 'general', tags: '' }); setViewing('new'); }}
+          className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+          <Plus size={18}/> New Article
+        </button>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col bg-[var(--card-bg)]">
-        {isEditing ? (
-          /* EDITOR MODE */
-          <form onSubmit={handleSave} className="flex flex-col h-full">
-            <div className="p-6 border-b border-[var(--card-border)]">
-              <input 
-                type="text" 
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Document Title..."
-                className="w-full bg-transparent text-3xl font-bold text-[var(--foreground)] focus:outline-none mb-4"
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="bg-[var(--background)] border border-[var(--card-border)] text-sm rounded-lg px-3 py-1 focus:outline-none">
-                  <option>General SOP</option>
-                  <option>QA Guidelines</option>
-                  <option>HR Policies</option>
-                  <option>Development</option>
-                  <option>Moderation Rules</option>
-                </select>
-              </div>
+      {viewing === 'new' || editing ? (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+          <h2 className="font-bold mb-4">{editing ? 'Edit Article' : 'New Article'}</h2>
+          <form onSubmit={saveArticle} className="space-y-4">
+            <input required placeholder="Article title *" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+              className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-yellow-500"/>
+            <div className="grid grid-cols-2 gap-4">
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+                <option value="general">General</option>
+                <option value="crm">CRM / Support</option>
+                <option value="qa">QA Process</option>
+                <option value="finance">Finance</option>
+                <option value="hr">HR Policy</option>
+                <option value="technical">Technical</option>
+                <option value="security">Security</option>
+              </select>
+              <input placeholder="Tags (comma separated)" value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))}
+                className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-yellow-500"/>
             </div>
-            
-            <textarea 
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Start typing your SOP here..."
-              className="flex-1 w-full bg-transparent p-6 text-[var(--foreground)] resize-none focus:outline-none leading-relaxed"
-            />
-            
-            <div className="p-4 border-t border-[var(--card-border)] flex justify-end gap-3">
-              <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 text-gray-500 font-medium hover:bg-gray-500/10 rounded-xl">Cancel</button>
-              <button type="submit" className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl flex items-center gap-2">
-                <Save size={16} /> Save Document
+            <textarea required placeholder="Article content (markdown supported) *" value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))}
+              rows={10} className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-yellow-500 resize-none font-mono"/>
+            <div className="flex gap-3">
+              <button type="submit" className="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2.5 rounded-xl">
+                {editing ? 'Update Article' : 'Publish Article'}
               </button>
+              <button type="button" onClick={() => { setEditing(null); setViewing(null); }}
+                className="px-6 bg-gray-500/10 text-gray-500 font-bold rounded-xl">Cancel</button>
             </div>
           </form>
-        ) : activeArticle ? (
-          /* READING MODE */
-          <div className="flex flex-col h-full">
-            <div className="p-8 border-b border-[var(--card-border)] flex justify-between items-start">
-              <div>
-                <span className="bg-blue-500/10 text-blue-500 text-xs font-bold px-2.5 py-1 rounded-md uppercase tracking-wider mb-4 inline-block">
-                  {activeArticle.category}
-                </span>
-                <h1 className="text-4xl font-bold text-[var(--foreground)]">{activeArticle.title}</h1>
-                <p className="text-sm text-gray-500 mt-2">Written by {activeArticle.author_email.split('@')[0]} • {new Date(activeArticle.created_at).toLocaleDateString()}</p>
+        </div>
+      ) : viewing && viewing !== 'new' ? (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-8">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-bold">{viewing.title}</h2>
+              <p className="text-xs text-gray-500 mt-1">{viewing.category} · {new Date(viewing.created_at).toLocaleDateString()}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => startEdit(viewing)} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg"><Edit2 size={16}/></button>
+              <button onClick={() => setViewing(null)} className="p-2 bg-gray-500/10 text-gray-500 hover:bg-gray-500 hover:text-white rounded-lg">✕</button>
+            </div>
+          </div>
+          <div className="prose prose-sm max-w-none whitespace-pre-wrap text-[var(--foreground)]">{viewing.content}</div>
+          {viewing.tags?.length > 0 && (
+            <div className="flex gap-2 mt-4 flex-wrap">
+              {viewing.tags.map((tag: string) => (
+                <span key={tag} className="text-xs bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded">{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="flex gap-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 text-gray-400" size={18}/>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search articles..."
+                className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-yellow-500"/>
+            </div>
+            <select value={category} onChange={e => setCategory(e.target.value)}
+              className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-4 py-2 text-sm focus:outline-none capitalize">
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.length === 0 ? (
+              <div className="col-span-2 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-12 text-center">
+                <BookOpen size={40} className="text-gray-300 mx-auto mb-3"/>
+                <p className="font-bold">No articles found</p>
               </div>
-              <button onClick={() => handleEdit(activeArticle)} className="p-2 border border-[var(--card-border)] hover:bg-gray-500/10 rounded-xl flex items-center gap-2 text-sm font-medium">
-                <Edit3 size={16} /> Edit
-              </button>
-            </div>
-            
-            <div className="p-8 overflow-y-auto whitespace-pre-wrap text-[var(--foreground)] leading-relaxed">
-              {activeArticle.content}
-            </div>
+            ) : filtered.map(article => (
+              <div key={article.id} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 hover:border-yellow-500/30 transition-colors group">
+                <div className="flex items-start justify-between mb-3">
+                  <span className="text-xs font-bold bg-yellow-500/10 text-yellow-600 px-2 py-1 rounded capitalize">{article.category || 'general'}</span>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => setViewing(article)} className="p-1.5 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg"><Eye size={14}/></button>
+                    <button onClick={() => startEdit(article)} className="p-1.5 bg-gray-500/10 text-gray-500 hover:bg-gray-500 hover:text-white rounded-lg"><Edit2 size={14}/></button>
+                    <button onClick={() => deleteArticle(article.id)} className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg"><Trash2 size={14}/></button>
+                  </div>
+                </div>
+                <h3 className="font-bold mb-2 cursor-pointer hover:text-yellow-600" onClick={() => setViewing(article)}>{article.title}</h3>
+                <p className="text-xs text-gray-500 line-clamp-2">{article.content}</p>
+                <div className="flex items-center gap-2 mt-3">
+                  {Array.isArray(article.tags) && article.tags.slice(0, 3).map((tag: string) => (
+                    <span key={tag} className="text-[10px] bg-gray-500/10 text-gray-500 px-2 py-0.5 rounded">{tag}</span>
+                  ))}
+                  <span className="text-[10px] text-gray-400 ml-auto">{new Date(article.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
           </div>
-        ) : (
-          /* EMPTY STATE */
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-            <BookOpen size={64} className="mb-4 text-gray-300" />
-            <p className="text-lg font-medium">Select a document from the sidebar</p>
-            <p className="text-sm">or create a new one to get started.</p>
-          </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

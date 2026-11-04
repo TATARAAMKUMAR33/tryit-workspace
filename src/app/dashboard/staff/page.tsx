@@ -1,196 +1,149 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Users, UserPlus, ShieldAlert, Mail, Shield, RefreshCw, 
-  Trash2, X, CheckCircle2 
-} from 'lucide-react';
+import { UserPlus, RefreshCw, Search, Edit2, UserX, UserCheck, Shield, Mail } from 'lucide-react';
 
-type StaffType = {
-  id: string;
-  user_email: string;
-  role: string;
-  created_at: string;
-};
+const ROLES = ['super_admin','qa_agent','crm_agent','hr','discipline_officer','finance','content_lead'];
 
 export default function StaffDirectory() {
-  const [staff, setStaff] = useState<StaffType[]>([]);
+  const [staff, setStaff] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-
-  // Form State
-  const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState('qa_agent');
-  const [message, setMessage] = useState('');
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState({ user_email: '', role: 'crm_agent', department: '', reporting_to: '' });
+  const user = localStorage.getItem('tryit_user') || '';
 
   const fetchStaff = async () => {
     setLoading(true);
-    const { data } = await supabase.from('staff_roles').select('*').order('created_at', { ascending: true });
+    const { data } = await supabase.from('staff_roles').select('*').order('created_at', { ascending: false });
     if (data) setStaff(data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    // Check if the logged-in user is Super Admin
-    const role = localStorage.getItem('tryit_role');
-    if (role === 'super_admin') setIsAdmin(true);
-    
-    fetchStaff();
-  }, []);
+  useEffect(() => { fetchStaff(); }, []);
 
-  const addStaff = async (e: React.FormEvent) => {
+  const saveStaff = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin) return alert("Only Super Admins can add staff.");
-
-    const { error } = await supabase.from('staff_roles').insert([{ user_email: newEmail, role: newRole }]);
-    
-    if (error) {
-      setMessage(`? Error: ${error.message}`);
+    if (editingId) {
+      await supabase.from('staff_roles').update({ role: form.role, department: form.department, reporting_to: form.reporting_to }).eq('id', editingId);
+      await supabase.from('audit_logs').insert([{ user_email: user, action: 'STAFF_ROLE_UPDATED', details: { target: form.user_email, role: form.role } }]);
     } else {
-      setMessage('? Staff member added successfully!');
-      setNewEmail('');
-      fetchStaff();
-      setTimeout(() => { setIsModalOpen(false); setMessage(''); }, 1500);
+      await supabase.from('staff_roles').insert([{ ...form, is_active: true }]);
+      await supabase.from('audit_logs').insert([{ user_email: user, action: 'STAFF_CREATED', details: { target: form.user_email, role: form.role } }]);
     }
+    setForm({ user_email: '', role: 'crm_agent', department: '', reporting_to: '' });
+    setShowForm(false); setEditingId(null);
+    fetchStaff();
   };
 
-  const removeStaff = async (id: string, email: string) => {
-    if (!isAdmin) return alert("Only Super Admins can fire staff.");
-    if (email === 'tatu.ind@hotmail.com') return alert("You cannot fire the Super Admin!");
-    
-    if (confirm(`Are you sure you want to revoke access for ${email}?`)) {
-      await supabase.from('staff_roles').delete().eq('id', id);
-      await supabase.from('audit_logs').insert([{ user_email: localStorage.getItem('tryit_user') || 'admin', action: 'REMOVE_STAFF', details: { removed_email: email } }]);
-      fetchStaff();
-    }
+  const toggleActive = async (id: string, email: string, current: boolean) => {
+    await supabase.from('staff_roles').update({ is_active: !current }).eq('id', id);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: current ? 'STAFF_DEACTIVATED' : 'STAFF_ACTIVATED', details: { target: email } }]);
+    fetchStaff();
   };
 
-  const getRoleBadge = (role: string) => {
-    switch(role) {
-      case 'super_admin': return 'bg-red-500/10 text-red-500 border-red-500/20';
-      case 'qa_agent': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'crm_agent': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-      case 'mentor': return 'bg-purple-500/10 text-purple-500 border-purple-500/20';
-      default: return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-    }
+  const startEdit = (s: any) => {
+    setForm({ user_email: s.user_email, role: s.role, department: s.department || '', reporting_to: s.reporting_to || '' });
+    setEditingId(s.id); setShowForm(true);
   };
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
+  const roleColors: Record<string, string> = {
+    super_admin: 'text-red-500 bg-red-500/10',
+    qa_agent: 'text-purple-500 bg-purple-500/10',
+    crm_agent: 'text-orange-500 bg-orange-500/10',
+    hr: 'text-blue-500 bg-blue-500/10',
+    discipline_officer: 'text-amber-500 bg-amber-500/10',
+    finance: 'text-green-500 bg-green-500/10',
+    content_lead: 'text-teal-500 bg-teal-500/10',
+  };
+
+  const filtered = staff.filter(s => !search || s.user_email.includes(search) || s.role.includes(search) || s.department?.includes(search));
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-sky-500" size={40}/></div>;
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 opacity-0 animate-fade-up">
-      
-      {/* Header */}
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <Users className="text-blue-500" size={32} /> Staff Directory
-          </h1>
-          <p className="text-gray-500">Manage employee access and roles across the platform.</p>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><UserPlus className="text-sky-500" size={32}/> Staff Directory</h1>
+          <p className="text-gray-500">{staff.filter(s => s.is_active).length} active · {staff.filter(s => !s.is_active).length} inactive</p>
         </div>
-        
-        {isAdmin && (
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-transform hover:scale-105 shadow-lg shadow-blue-500/30"
-          >
-            <UserPlus size={18} /> Add Staff
-          </button>
-        )}
+        <button onClick={() => { setShowForm(!showForm); setEditingId(null); setForm({ user_email: '', role: 'crm_agent', department: '', reporting_to: '' }); }}
+          className="bg-sky-600 hover:bg-sky-500 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+          <UserPlus size={18}/> Add Staff
+        </button>
       </div>
 
-      {/* Staff Table */}
-      <div className="bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[var(--background)]/50 text-gray-500 text-xs uppercase tracking-wider">
-                <th className="p-5 font-semibold">Employee Email</th>
-                <th className="p-5 font-semibold">Role / Access Level</th>
-                <th className="p-5 font-semibold">Date Joined</th>
-                <th className="p-5 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--card-border)]">
-              {staff.map((member) => (
-                <tr key={member.id} className="hover:bg-[var(--background)]/30 transition-colors">
-                  <td className="p-5">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md">
-                        {member.user_email[0].toUpperCase()}
-                      </div>
-                      <span className="font-semibold text-[var(--foreground)]">{member.user_email}</span>
-                    </div>
-                  </td>
-                  <td className="p-5">
-                    <span className={`px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider border ${getRoleBadge(member.role)}`}>
-                      {member.role.replace('_', ' ')}
-                    </span>
-                  </td>
-                  <td className="p-5 text-sm text-gray-500">
-                    {new Date(member.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="p-5 text-right">
-                    {isAdmin && member.user_email !== 'tatu.ind@hotmail.com' && (
-                      <button 
-                        onClick={() => removeStaff(member.id, member.user_email)}
-                        className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"
-                        title="Revoke Access"
-                      >
-                        <Trash2 size={18} />
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Add Staff Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-up">
-          <div className="bg-[var(--background)] border border-[var(--card-border)] p-8 rounded-3xl max-w-md w-full shadow-2xl relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
-            
-            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2"><UserPlus className="text-blue-500"/> Add New Staff</h2>
-            <p className="text-sm text-gray-500 mb-6">Enter their email and assign their role. They can use this email to log in immediately.</p>
-            
-            <form onSubmit={addStaff} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3.5 text-gray-400" size={18} />
-                  <input required type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="employee@tryit.com" className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-3 pl-10 pr-4 focus:outline-none focus:border-blue-500" />
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Role</label>
-                <select value={newRole} onChange={e => setNewRole(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-blue-500">
-                  <option value="qa_agent">QA Agent (Questions)</option>
-                  <option value="crm_agent">CRM Agent (Tickets)</option>
-                  <option value="hr">HR Manager (Staff & Tasks)</option>
-                  <option value="mentor">Mentor (Doubt Solving)</option>
-                  <option value="marketing">Marketing (Bharat Pulse)</option>
-                </select>
-              </div>
-              
-              {message && (
-                <div className={`p-3 rounded-xl text-sm text-center font-semibold ${message.includes('?') ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
-                  {message}
-                </div>
-              )}
-
-              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl mt-2 transition-transform hover:scale-[1.02] shadow-lg shadow-blue-500/30">
-                Grant Access
+      {showForm && (
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+          <h2 className="font-bold mb-4">{editingId ? 'Edit Staff Member' : 'Add New Staff Member'}</h2>
+          <form onSubmit={saveStaff} className="grid grid-cols-2 gap-4">
+            <input required placeholder="Staff email *" value={form.user_email} disabled={!!editingId}
+              onChange={e => setForm(p => ({ ...p, user_email: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500 disabled:opacity-60"/>
+            <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ').toUpperCase()}</option>)}
+            </select>
+            <input placeholder="Department" value={form.department}
+              onChange={e => setForm(p => ({ ...p, department: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500"/>
+            <input placeholder="Reporting to (email)" value={form.reporting_to}
+              onChange={e => setForm(p => ({ ...p, reporting_to: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-sky-500"/>
+            <div className="col-span-2 flex gap-3">
+              <button type="submit" className="flex-1 bg-sky-600 hover:bg-sky-500 text-white font-bold py-2.5 rounded-xl">
+                {editingId ? 'Update Staff' : 'Add Staff Member'}
               </button>
-            </form>
-          </div>
+              <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }}
+                className="px-6 bg-gray-500/10 text-gray-500 font-bold rounded-xl">Cancel</button>
+            </div>
+          </form>
         </div>
       )}
+
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 text-gray-400" size={18}/>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by email, role, or department..."
+          className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-sky-500"/>
+      </div>
+
+      <div className="space-y-3">
+        {filtered.map(s => (
+          <div key={s.id} className={`bg-[var(--card-bg)] border rounded-2xl p-5 flex items-center justify-between gap-4 ${!s.is_active ? 'opacity-50' : 'border-[var(--card-border)]'}`}>
+            <div className="flex items-center gap-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${s.is_active ? 'bg-gradient-to-tr from-sky-500 to-blue-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                {s.user_email?.[0]?.toUpperCase()}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold">{s.user_email.split('@')[0]}</p>
+                  {s.is_online && <span className="w-2 h-2 bg-green-500 rounded-full"/>}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${roleColors[s.role] || 'text-gray-500 bg-gray-500/10'}`}>
+                    {s.role.replace(/_/g, ' ').toUpperCase()}
+                  </span>
+                  {s.department && <span className="text-xs text-gray-500">{s.department}</span>}
+                  {s.reporting_to && <span className="text-xs text-gray-400">→ {s.reporting_to.split('@')[0]}</span>}
+                </div>
+                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1"><Mail size={10}/>{s.user_email}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {s.is_on_leave && <span className="text-xs bg-yellow-500/10 text-yellow-500 px-2 py-1 rounded font-bold">ON LEAVE</span>}
+              <button onClick={() => startEdit(s)} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors">
+                <Edit2 size={16}/>
+              </button>
+              <button onClick={() => toggleActive(s.id, s.user_email, s.is_active)}
+                className={`p-2 rounded-lg transition-colors ${s.is_active ? 'bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white' : 'bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white'}`}>
+                {s.is_active ? <UserX size={16}/> : <UserCheck size={16}/>}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
-

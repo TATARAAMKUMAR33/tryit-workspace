@@ -1,223 +1,171 @@
 ﻿'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Plus, X, Briefcase, Calendar, CheckSquare, 
-  Clock, PlayCircle, Eye, CheckCircle2, User
-} from 'lucide-react';
-
-type TaskType = {
-  id: string;
-  title: string;
-  description: string;
-  team: string;
-  assigned_to: string | null;
-  status: 'todo' | 'in_progress' | 'review' | 'done';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  due_date: string | null;
-  created_at: string;
-};
+import { Users, RefreshCw, TrendingUp, Award, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 export default function TeamHub() {
-  const [tasks, setTasks] = useState<TaskType[]>([]);
+  const [scorecards, setScorecards] = useState<any[]>([]);
+  const [runbook, setRunbook] = useState<any[]>([]);
+  const [leaves, setLeaves] = useState<any[]>([]);
+  const [badges, setBadges] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [staff, setStaff] = useState<any[]>([]);
+  const user = localStorage.getItem('tryit_user') || '';
+  const role = localStorage.getItem('tryit_role') || '';
 
-  // New Task Form State
-  const [newTitle, setNewTitle] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newTeam, setNewTeam] = useState('QA');
-  const [newPriority, setNewPriority] = useState<'low' | 'medium' | 'high' | 'urgent'>('medium');
-  const [newAssignee, setNewAssignee] = useState('');
-
-  const fetchTasks = useCallback(async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-    if (data) setTasks(data);
+    const today = new Date().toISOString().split('T')[0];
+    const [s, r, l, b] = await Promise.all([
+      supabase.from('staff_scorecards').select('*'),
+      supabase.from('daily_runbook').select('*').eq('date', today).order('due_time'),
+      supabase.from('team_leave_calendar').select('*'),
+      supabase.from('staff_badges').select('*').order('earned_at', { ascending: false }).limit(10),
+    ]);
+    if (s.data) setScorecards(s.data);
+    if (r.data) setRunbook(r.data);
+    if (l.data) setLeaves(l.data);
+    if (b.data) setBadges(b.data);
     setLoading(false);
-  }, []);
-
-  const fetchStaff = async () => {
-    const { data } = await supabase.from('staff_roles').select('user_email, role');
-    if (data) setStaff(data);
   };
 
-  useEffect(() => {
-    fetchTasks();
-    fetchStaff();
-  }, [fetchTasks]);
+  useEffect(() => { fetchData(); }, []);
 
-  const createTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newTask = {
-      title: newTitle,
-      description: newDesc,
-      team: newTeam,
-      priority: newPriority,
-      assigned_to: newAssignee || null,
-      status: 'todo'
-    };
-    
-    const { error } = await supabase.from('tasks').insert([newTask]);
-    if (!error) {
-      setIsModalOpen(false);
-      setNewTitle('');
-      setNewDesc('');
-      fetchTasks();
-    } else {
-      alert("Error creating task: " + error.message);
-    }
+  const completeTask = async (id: string) => {
+    await supabase.from('daily_runbook').update({ status: 'completed', completed_by: user, completed_at: new Date().toISOString() }).eq('id', id);
+    fetchData();
   };
 
-  const moveTask = async (id: string, newStatus: 'todo' | 'in_progress' | 'review' | 'done') => {
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, status: newStatus } : t));
-    await supabase.from('tasks').update({ status: newStatus }).eq('id', id);
-  };
+  const myTasks = runbook.filter(r => role === 'super_admin' || r.assigned_role === role || r.assigned_to_email === user);
+  const pendingTasks = myTasks.filter(r => r.status === 'pending');
+  const completedTasks = myTasks.filter(r => r.status === 'completed');
+  const onLeaveToday = leaves.filter(l => l.status === 'approved');
 
-  const getPriorityColor = (priority: string) => {
-    switch(priority) {
-      case 'urgent': return 'text-red-500 bg-red-500/10 border-red-500/20';
-      case 'high': return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
-      case 'medium': return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
-      default: return 'text-slate-500 bg-slate-500/10 border-slate-500/20';
-    }
-  };
-
-  const columns = [
-    { id: 'todo', title: 'To Do', icon: CheckSquare, color: 'text-slate-500' },
-    { id: 'in_progress', title: 'In Progress', icon: PlayCircle, color: 'text-blue-500' },
-    { id: 'review', title: 'In Review', icon: Eye, color: 'text-purple-500' },
-    { id: 'done', title: 'Done', icon: CheckCircle2, color: 'text-green-500' },
-  ];
-
-  if (loading) return <div className="flex justify-center py-20 text-blue-500 font-medium animate-pulse">Loading Workspace...</div>;
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-green-500" size={40}/></div>;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-6 h-full flex flex-col opacity-0 animate-fade-up">
-      
-      {/* Header */}
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-1 flex items-center gap-3">
-            <Briefcase className="text-purple-500" size={32} /> Team Workspace
-          </h1>
-          <p className="text-gray-500">Assign tasks and monitor team progress.</p>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><Users className="text-green-500" size={32}/> Team Hub</h1>
+          <p className="text-gray-500">Today's runbook, team performance, and leave status.</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl font-semibold flex items-center gap-2 transition-transform hover:scale-105 shadow-lg shadow-purple-500/30"
-        >
-          <Plus size={18} /> New Task
+        <button onClick={fetchData} className="p-2.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-gray-500">
+          <RefreshCw size={20} className={loading ? 'animate-spin' : ''}/>
         </button>
       </div>
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-1 overflow-hidden">
-        {columns.map((col) => {
-          const colTasks = tasks.filter(t => t.status === col.id);
-          return (
-            <div key={col.id} className="bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--card-border)] rounded-3xl p-4 flex flex-col h-full">
-              <div className="flex items-center justify-between mb-4 px-2">
-                <h3 className="font-bold text-sm flex items-center gap-2 text-[var(--foreground)] uppercase tracking-wider">
-                  <col.icon size={16} className={col.color} /> {col.title}
-                </h3>
-                <span className="bg-[var(--background)] text-gray-500 text-xs font-bold px-2 py-0.5 rounded-md border border-[var(--card-border)]">
-                  {colTasks.length}
-                </span>
-              </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Team Members', value: scorecards.filter(s => s.is_active).length, color: 'text-green-500', bg: 'bg-green-500/10' },
+          { label: 'Pending Tasks', value: pendingTasks.length, color: pendingTasks.length > 0 ? 'text-yellow-500' : 'text-green-500', bg: pendingTasks.length > 0 ? 'bg-yellow-500/10' : 'bg-green-500/10' },
+          { label: 'On Leave Today', value: onLeaveToday.length, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+          { label: 'Badges Earned', value: badges.length, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+        ].map(card => (
+          <div key={card.label} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 text-center">
+            <div className={`text-3xl font-black ${card.color}`}>{card.value}</div>
+            <div className="text-xs text-gray-500 font-bold uppercase mt-1">{card.label}</div>
+          </div>
+        ))}
+      </div>
 
-              <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-                {colTasks.map(task => (
-                  <div key={task.id} className="bg-[var(--background)] p-4 rounded-2xl border border-[var(--card-border)] hover:border-purple-500/30 transition-all group shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                      <span className="text-xs font-bold text-gray-400 bg-gray-500/10 px-2 py-1 rounded-md">{task.team}</span>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+          <h2 className="font-bold text-lg mb-3 flex items-center gap-2"><Clock size={18} className="text-blue-500"/> Today's Runbook</h2>
+          <div className="space-y-2">
+            {myTasks.length === 0 ? (
+              <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-8 text-center">
+                <CheckCircle2 size={32} className="text-green-500 mx-auto mb-2"/>
+                <p className="text-gray-500 text-sm">No tasks assigned for today</p>
+              </div>
+            ) : myTasks.map(task => (
+              <div key={task.id} className={`bg-[var(--card-bg)] border rounded-2xl p-4 flex items-start justify-between gap-3 ${task.status === 'completed' ? 'opacity-60 border-[var(--card-border)]' : 'border-blue-500/20'}`}>
+                <div className="flex items-start gap-3">
+                  {task.status === 'completed'
+                    ? <CheckCircle2 size={18} className="text-green-500 mt-0.5 shrink-0"/>
+                    : <Clock size={18} className="text-blue-500 mt-0.5 shrink-0"/>}
+                  <div>
+                    <p className={`font-bold text-sm ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>{task.task_name}</p>
+                    <p className="text-xs text-gray-500">Due by {task.due_time} · {task.assigned_role.replace('_', ' ')}</p>
+                    {task.status === 'pending' && task.consequence_if_missed && (
+                      <p className="text-xs text-orange-400 mt-1">⚠️ {task.consequence_if_missed}</p>
+                    )}
+                  </div>
+                </div>
+                {task.status === 'pending' && (
+                  <button onClick={() => completeTask(task.id)}
+                    className="px-3 py-1.5 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-xl text-xs font-bold shrink-0">
+                    Done
+                  </button>
+                )}
+              </div>
+            ))}
+            {myTasks.length > 0 && (
+              <div className="text-xs text-gray-500 text-right">
+                {completedTasks.length}/{myTasks.length} completed today
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <h2 className="font-bold text-lg mb-3 flex items-center gap-2"><TrendingUp size={18} className="text-purple-500"/> Team Leaderboard</h2>
+            <div className="space-y-2">
+              {scorecards.filter(s => s.is_active).sort((a, b) => b.tickets_this_week - a.tickets_this_week).slice(0, 5).map((s, idx) => (
+                <div key={s.user_email} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className={`text-lg ${idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '  '}`}>
+                      {idx < 3 ? ['🥇','🥈','🥉'][idx] : `#${idx+1}`}
+                    </span>
+                    <div>
+                      <p className="font-bold text-sm">{s.user_email.split('@')[0]}</p>
+                      <p className="text-xs text-gray-500 capitalize">{s.role.replace('_', ' ')}</p>
                     </div>
-                    <h4 className="font-bold text-sm text-[var(--foreground)] mb-1 leading-snug">{task.title}</h4>
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-3">{task.description}</p>
-                    
-                    <div className="flex items-center justify-between mt-auto pt-3 border-t border-[var(--card-border)]">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium truncate max-w-[100px]">
-                        <User size={12} /> {task.assigned_to ? task.assigned_to.split('@')[0] : 'Unassigned'}
-                      </div>
-                      
-                      {/* Simple Status Mover */}
-                      <select 
-                        value={task.status} 
-                        onChange={(e) => moveTask(task.id, e.target.value as any)}
-                        className="text-[10px] bg-transparent border border-[var(--card-border)] rounded p-1 outline-none cursor-pointer hover:border-purple-500"
-                      >
-                        <option value="todo">To Do</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="review">Review</option>
-                        <option value="done">Done</option>
-                      </select>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-blue-500">{s.tickets_this_week}</p>
+                    <p className="text-[10px] text-gray-500">this week</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {onLeaveToday.length > 0 && (
+            <div>
+              <h2 className="font-bold text-lg mb-3 flex items-center gap-2"><AlertTriangle size={18} className="text-yellow-500"/> On Leave Today</h2>
+              {onLeaveToday.map(l => (
+                <div key={l.user_email} className="bg-yellow-500/5 border border-yellow-500/20 rounded-xl p-3 flex items-center justify-between mb-2">
+                  <div>
+                    <p className="font-bold text-sm">{l.user_email.split('@')[0]}</p>
+                    <p className="text-xs text-gray-500">{l.role.replace('_', ' ')} · {l.leave_type}</p>
+                  </div>
+                  {l.substitute_email && (
+                    <span className="text-xs text-blue-500">Cover: {l.substitute_email.split('@')[0]}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div>
+            <h2 className="font-bold text-lg mb-3 flex items-center gap-2"><Award size={18} className="text-yellow-500"/> Recent Badges</h2>
+            <div className="space-y-2">
+              {badges.length === 0
+                ? <p className="text-gray-500 text-sm">No badges earned yet</p>
+                : badges.slice(0, 4).map(b => (
+                  <div key={b.id} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 flex items-center gap-3">
+                    <span className="text-2xl">{b.badge_icon}</span>
+                    <div>
+                      <p className="font-bold text-sm">{b.badge_name}</p>
+                      <p className="text-xs text-gray-500">{b.user_email.split('@')[0]} · {new Date(b.earned_at).toLocaleDateString()}</p>
                     </div>
                   </div>
                 ))}
-              </div>
             </div>
-          );
-        })}
-      </div>
-
-      {/* New Task Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-up">
-          <div className="bg-[var(--background)] border border-[var(--card-border)] p-8 rounded-3xl max-w-lg w-full shadow-2xl relative">
-            <button onClick={() => setIsModalOpen(false)} className="absolute top-4 right-4 text-gray-500 hover:text-white"><X size={20}/></button>
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Plus className="text-purple-500"/> Create New Task</h2>
-            
-            <form onSubmit={createTask} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Task Title</label>
-                <input required type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="E.g., Review 50 Physics Questions" className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-purple-500" />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Description</label>
-                <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} placeholder="Add details..." className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 h-24 focus:outline-none focus:border-purple-500 resize-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Team</label>
-                  <select value={newTeam} onChange={e => setNewTeam(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-purple-500">
-                    <option value="QA">QA Team</option>
-                    <option value="Web Dev">Web Dev</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="HR">HR</option>
-                    <option value="Legal">Legal</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Priority</label>
-                  <select value={newPriority} onChange={e => setNewPriority(e.target.value as any)} className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-purple-500">
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Assign To (Optional)</label>
-                <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-purple-500">
-                  <option value="">Unassigned</option>
-                  {staff.map(s => (
-                    <option key={s.user_email} value={s.user_email}>{s.user_email} ({s.role})</option>
-                  ))}
-                </select>
-              </div>
-              
-              <button type="submit" className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 rounded-xl mt-4 transition-transform hover:scale-[1.02] shadow-lg shadow-purple-500/30">
-                Create Task
-              </button>
-            </form>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

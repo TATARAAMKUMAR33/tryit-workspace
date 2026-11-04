@@ -1,192 +1,169 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Gavel, AlertTriangle, ShieldCheck, IndianRupee, 
-  MessageSquare, ExternalLink, RefreshCw, XCircle, CheckCircle2
-} from 'lucide-react';
+import { Gavel, RefreshCw, CheckCircle2, XCircle, Clock, Search, IndianRupee } from 'lucide-react';
 
-type DisputeType = {
-  id: string;
-  raised_by: string;
-  against_user: string;
-  reason: string;
-  evidence_url: string | null;
-  amount_involved: number;
-  status: 'open' | 'investigating' | 'refunded' | 'dismissed';
-  resolution_notes: string | null;
-  created_at: string;
-};
-
-export default function DisputeCenter() {
-  const [disputes, setDisputes] = useState<DisputeType[]>([]);
+export default function Disputes() {
+  const [disputes, setDisputes] = useState<any[]>([]);
+  const [payoutDisputes, setPayoutDisputes] = useState<any[]>([]);
+  const [refunds, setRefunds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDispute, setSelectedDispute] = useState<DisputeType | null>(null);
-  
-  // Resolution State
-  const [notes, setNotes] = useState('');
+  const [activeTab, setActiveTab] = useState('disputes');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<any>(null);
+  const user = localStorage.getItem('tryit_user') || '';
 
-  const fetchDisputes = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase.from('disputes').select('*').order('created_at', { ascending: false });
-    if (data) setDisputes(data as DisputeType[]);
+    const [d, p, r] = await Promise.all([
+      supabase.from('disputes').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('payout_disputes').select('*').order('created_at', { ascending: false }).limit(30),
+      supabase.from('refund_requests').select('*').order('created_at', { ascending: false }).limit(30),
+    ]);
+    if (d.data) setDisputes(d.data);
+    if (p.data) setPayoutDisputes(p.data);
+    if (r.data) setRefunds(r.data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchDisputes();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  const handleResolve = async (status: 'refunded' | 'dismissed') => {
-    if (!selectedDispute) return;
-    if (!notes.trim()) {
-      alert('Please add resolution notes before closing the case.');
-      return;
-    }
-
-    // 1. Update the dispute
-    await supabase.from('disputes').update({
-      status: status,
-      resolution_notes: notes
-    }).eq('id', selectedDispute.id);
-
-    // 2. Log the action
-    await supabase.from('audit_logs').insert([{
-      user_email: localStorage.getItem('tryit_user') || 'admin',
-      action: status === 'refunded' ? 'ISSUE_DISPUTE_REFUND' : 'DISMISS_DISPUTE',
-      details: { dispute_id: selectedDispute.id, amount: selectedDispute.amount_involved }
-    }]);
-
-    // Reset & refresh
-    setSelectedDispute(null);
-    setNotes('');
-    fetchDisputes();
+  const resolveItem = async (id: string, table: string, resolution: string, status: string) => {
+    await supabase.from(table).update({ status, resolved_by: user, resolution_note: resolution, resolved_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: `DISPUTE_${status.toUpperCase()}`, details: { item_id: id, table, resolution } }]);
+    setSelected(null);
+    fetchData();
   };
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case 'open': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-      case 'investigating': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
-      case 'refunded': return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case 'dismissed': return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
-      default: return 'bg-gray-500/10 text-gray-500';
-    }
+  const updateRefundStatus = async (id: string, status: string) => {
+    await supabase.from('refund_requests').update({ status, reviewed_by: user, reviewed_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: `REFUND_${status.toUpperCase()}`, details: { refund_id: id } }]);
+    fetchData();
   };
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
+  const getStatusColor = (status: string) => {
+    if (status === 'resolved' || status === 'approved') return 'text-green-500 bg-green-500/10';
+    if (status === 'rejected' || status === 'dismissed') return 'text-red-500 bg-red-500/10';
+    return 'text-yellow-500 bg-yellow-500/10';
+  };
+
+  const allItems = activeTab === 'disputes' ? disputes : activeTab === 'payouts' ? payoutDisputes : refunds;
+  const filtered = allItems.filter(i => {
+    const str = JSON.stringify(i).toLowerCase();
+    return !search || str.includes(search.toLowerCase());
+  });
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-red-500" size={40}/></div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-fade-up">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <Gavel className="text-red-500" size={32} /> Dispute Resolution
-          </h1>
-          <p className="text-gray-500">Mediate conflicts, review evidence, and issue escrow refunds.</p>
-        </div>
-        <button onClick={fetchDisputes} className="p-3 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl hover:bg-gray-500/10 text-gray-500 transition-colors">
-          <RefreshCw size={20} />
-        </button>
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-up">
+      <div>
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><Gavel className="text-red-500" size={32}/> Dispute Resolution</h1>
+        <p className="text-gray-500">
+          {disputes.filter(d => d.status === 'open').length} open disputes ·
+          {payoutDisputes.filter(d => d.status === 'pending').length} payout disputes ·
+          {refunds.filter(r => r.status === 'pending').length} refund requests
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        
-        {/* Left Column: Dispute List */}
-        <div className="md:col-span-1 space-y-4">
-          <h2 className="font-bold text-lg text-[var(--foreground)] mb-2 flex items-center gap-2"><AlertTriangle className="text-yellow-500" size={20}/> Active Cases</h2>
-          {disputes.length === 0 ? (
-            <p className="text-gray-500 italic">No disputes found.</p>
-          ) : (
-            disputes.map(d => (
-              <div 
-                key={d.id} 
-                onClick={() => { setSelectedDispute(d); setNotes(d.resolution_notes || ''); }}
-                className={`bg-[var(--card-bg)] border cursor-pointer p-5 rounded-2xl transition-all ${selectedDispute?.id === d.id ? 'border-red-500/50 shadow-lg' : 'border-[var(--card-border)] hover:border-gray-500/30'}`}
-              >
-                <div className="flex justify-between items-start mb-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{new Date(d.created_at).toLocaleDateString()}</span>
-                  <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase border ${getStatusBadge(d.status)}`}>{d.status}</span>
-                </div>
-                <p className="font-bold text-[var(--foreground)] line-clamp-1">{d.reason}</p>
-                <div className="flex justify-between items-center mt-3 text-sm">
-                  <span className="text-gray-500 truncate">{d.raised_by.split('@')[0]}</span>
-                  {d.amount_involved > 0 && <span className="font-bold text-red-500 flex items-center"><IndianRupee size={12}/>{d.amount_involved}</span>}
-                </div>
-              </div>
-            ))
-          )}
+      <div className="flex gap-2">
+        {[
+          { id: 'disputes', label: `Disputes (${disputes.length})` },
+          { id: 'payouts', label: `Payout Disputes (${payoutDisputes.length})` },
+          { id: 'refunds', label: `Refund Requests (${refunds.length})` },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold ${activeTab === tab.id ? 'bg-red-500 text-white' : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-gray-500'}`}>
+            {tab.label}
+          </button>
+        ))}
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+            className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none"/>
         </div>
+      </div>
 
-        {/* Right Column: Case Details & Resolution */}
-        <div className="md:col-span-2">
-          {selectedDispute ? (
-            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-8 shadow-xl sticky top-24">
-              
-              <div className="flex justify-between items-start mb-6 border-b border-[var(--card-border)] pb-6">
-                <div>
-                  <h2 className="text-2xl font-bold mb-2">{selectedDispute.reason}</h2>
-                  <p className="text-sm text-gray-500 flex items-center gap-2">
-                    <span className="font-bold text-[var(--foreground)]">{selectedDispute.raised_by}</span> 
-                    vs 
-                    <span className="font-bold text-red-500">{selectedDispute.against_user}</span>
-                  </p>
+      {selected && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-[var(--background)] border border-[var(--card-border)] rounded-2xl p-6 max-w-lg w-full">
+            <div className="flex justify-between mb-4">
+              <h2 className="font-bold text-lg">Resolve Dispute</h2>
+              <button onClick={() => setSelected(null)} className="text-gray-400 hover:text-white">✕</button>
+            </div>
+            <div className="bg-[var(--card-bg)] rounded-xl p-4 mb-4 text-sm space-y-1">
+              {Object.entries(selected).filter(([k]) => !['id'].includes(k)).slice(0, 8).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="text-gray-500 w-32 shrink-0 text-xs">{k.replace(/_/g, ' ')}:</span>
+                  <span className="text-xs">{String(v).substring(0, 80)}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Amount in Escrow</p>
-                  <p className="text-2xl font-black text-[var(--foreground)] flex items-center justify-end"><IndianRupee size={20}/>{selectedDispute.amount_involved}</p>
+              ))}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => resolveItem(selected.id, 'disputes', 'Resolved in favor of student', 'resolved')}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
+                <CheckCircle2 size={16}/> Resolve
+              </button>
+              <button onClick={() => resolveItem(selected.id, 'disputes', 'Dismissed after review', 'dismissed')}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl text-sm flex items-center justify-center gap-2">
+                <XCircle size={16}/> Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {filtered.length === 0 ? (
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-12 text-center">
+            <CheckCircle2 size={40} className="text-green-500 mx-auto mb-3"/>
+            <p className="font-bold">No {activeTab} found</p>
+          </div>
+        ) : activeTab === 'refunds' ? (
+          filtered.map(r => (
+            <div key={r.id} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <IndianRupee size={20} className="text-green-500"/>
+                <div>
+                  <p className="font-bold">{r.user_email || r.student_email}</p>
+                  <p className="text-xs text-gray-500">{r.reason} · {new Date(r.created_at).toLocaleDateString()}</p>
                 </div>
               </div>
-
-              {/* Evidence */}
-              <div className="mb-8">
-                <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">Evidence Provided</p>
-                {selectedDispute.evidence_url ? (
-                  <a href={selectedDispute.evidence_url} target="_blank" rel="noreferrer" className="flex items-center gap-2 px-4 py-3 bg-[var(--background)] border border-[var(--card-border)] rounded-xl w-fit text-blue-500 hover:bg-blue-500/10 transition-colors font-medium">
-                    <MessageSquare size={18} /> View Attached Chat/Image <ExternalLink size={14} />
-                  </a>
-                ) : (
-                  <p className="text-sm text-gray-500 italic">No evidence attached. Rely on system logs.</p>
+              <div className="flex items-center gap-3">
+                {r.amount && <span className="font-black text-green-500 text-lg">₹{r.amount}</span>}
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${getStatusColor(r.status || 'pending')}`}>{r.status || 'pending'}</span>
+                {(!r.status || r.status === 'pending' || r.status === 'initiated') && (
+                  <div className="flex gap-2">
+                    <button onClick={() => updateRefundStatus(r.id, 'approved')} className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg"><CheckCircle2 size={16}/></button>
+                    <button onClick={() => updateRefundStatus(r.id, 'rejected')} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg"><XCircle size={16}/></button>
+                  </div>
                 )}
               </div>
-
-              {/* Resolution Form */}
-              {selectedDispute.status === 'open' || selectedDispute.status === 'investigating' ? (
-                <div className="bg-[var(--background)] p-6 rounded-2xl border border-[var(--card-border)]">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><ShieldCheck className="text-blue-500"/> Mediation & Resolution</h3>
-                  <textarea 
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Document the investigation details and final decision..."
-                    className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 h-32 focus:outline-none focus:border-blue-500 resize-none mb-4"
-                  />
-                  <div className="flex gap-4">
-                    <button onClick={() => handleResolve('dismissed')} className="flex-1 bg-gray-500/10 text-gray-600 dark:text-gray-300 hover:bg-gray-500/20 font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors">
-                      <XCircle size={18} /> Dismiss Claim
-                    </button>
-                    <button onClick={() => handleResolve('refunded')} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-green-500/30">
-                      <CheckCircle2 size={18} /> Issue Refund
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-[var(--background)] p-6 rounded-2xl border border-[var(--card-border)]">
-                  <h3 className="font-bold text-sm text-gray-500 uppercase tracking-wider mb-2">Resolution Notes</h3>
-                  <p className="text-[var(--foreground)]">{selectedDispute.resolution_notes || 'No notes provided.'}</p>
-                </div>
-              )}
-
             </div>
-          ) : (
-            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-10 text-center h-full flex flex-col justify-center items-center">
-              <Gavel size={64} className="text-gray-300 mb-4" />
-              <h3 className="text-xl font-bold text-[var(--foreground)]">Select a Case</h3>
-              <p className="text-gray-500">Choose a dispute from the left to review evidence and mediate.</p>
+          ))
+        ) : (
+          filtered.map(item => (
+            <div key={item.id} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <Clock size={18} className={item.status === 'open' || item.status === 'pending' ? 'text-yellow-500' : 'text-green-500'}/>
+                <div>
+                  <p className="font-bold text-sm">{item.mentor_email || item.user_email || item.student_email || 'Unknown'}</p>
+                  <p className="text-xs text-gray-500">{item.reason || item.dispute_reason || 'No reason provided'}</p>
+                  <p className="text-xs text-gray-400">{new Date(item.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {item.amount && <span className="font-black text-lg">₹{item.amount}</span>}
+                <span className={`text-xs font-bold px-3 py-1.5 rounded-xl ${getStatusColor(item.status || 'pending')}`}>{item.status || 'pending'}</span>
+                {(item.status === 'open' || item.status === 'pending') && (
+                  <button onClick={() => setSelected(item)} className="px-3 py-1.5 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-bold">
+                    Review
+                  </button>
+                )}
+              </div>
             </div>
-          )}
-        </div>
-
+          ))
+        )}
       </div>
     </div>
   );

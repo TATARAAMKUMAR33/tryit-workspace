@@ -1,118 +1,130 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  Settings, ShieldAlert, Power, BookOpen, MessageSquare, 
-  Sparkles, RefreshCw, Save, AlertTriangle
-} from 'lucide-react';
+import { Settings, Save, RefreshCw, Shield, Bell, Database, Sliders } from 'lucide-react';
 
-type SettingType = {
-  id: string;
-  key: string;
-  value: boolean;
-  description: string;
-};
-
-export default function GlobalSettings() {
-  const [settings, setSettings] = useState<Record<string, SettingType>>({});
+export default function SystemSettings() {
+  const [settings, setSettings] = useState<any[]>([]);
+  const [thresholds, setThresholds] = useState<any[]>([]);
+  const [features, setFeatures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving] = useState<string | null>(null);
 
-  const fetchSettings = async () => {
+  const fetchData = async () => {
     setLoading(true);
-    const { data } = await supabase.from('platform_settings').select('*');
-    if (data) {
-      const settingsMap: Record<string, SettingType> = {};
-      data.forEach((s: any) => {
-        settingsMap[s.key] = { ...s, value: s.value === true || s.value === 'true' };
-      });
-      setSettings(settingsMap);
-    }
+    const [s, t, f] = await Promise.all([
+      supabase.from('platform_settings').select('*').order('key'),
+      supabase.from('system_thresholds').select('*').order('name'),
+      supabase.from('system_features').select('*').order('name'),
+    ]);
+    if (s.data) setSettings(s.data);
+    if (t.data) setThresholds(t.data);
+    if (f.data) setFeatures(f.data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  const toggleSetting = async (key: string, currentValue: boolean) => {
-    // Optimistic update
-    setSettings(prev => ({
-      ...prev,
-      [key]: { ...prev[key], value: !currentValue }
-    }));
-
-    setSaving(true);
-    await supabase.from('platform_settings').update({ 
-      value: !currentValue,
-      updated_at: new Date().toISOString()
-    }).eq('key', key);
-    setSaving(false);
+  const updateSetting = async (id: string, value: string) => {
+    setSaving(id);
+    await supabase.from('platform_settings').update({ value, updated_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('audit_logs').insert([{
+      user_email: localStorage.getItem('tryit_user') || 'admin',
+      action: 'SETTING_UPDATED',
+      details: { setting_id: id, new_value: value }
+    }]);
+    setSaving(null);
+    fetchData();
   };
 
-  const settingConfig = [
-    { key: 'maintenance_mode', title: 'Global Maintenance Mode', icon: Power, color: 'text-red-500', bg: 'bg-red-500/10', desc: 'Blocks ALL students from accessing the platform immediately.' },
-    { key: 'exam_engine_active', title: 'Exam Engine', icon: BookOpen, color: 'text-blue-500', bg: 'bg-blue-500/10', desc: 'Allows students to take All India Mock Tests.' },
-    { key: 'doubt_engine_active', title: 'Doubt Engine', icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-500/10', desc: 'Allows students to post doubts and mentors to answer.' },
-    { key: 'bharat_pulse_active', title: 'Bharat Pulse Feed', icon: Sparkles, color: 'text-orange-500', bg: 'bg-orange-500/10', desc: 'Toggles the community social feed.' },
-  ];
+  const updateThreshold = async (id: string, value: number) => {
+    setSaving(id);
+    await supabase.from('system_thresholds').update({ value }).eq('id', id);
+    setSaving(null);
+    fetchData();
+  };
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
+  const toggleFeature = async (id: string, current: boolean) => {
+    setSaving(id);
+    await supabase.from('system_features').update({ is_enabled: !current }).eq('id', id);
+    await supabase.from('audit_logs').insert([{
+      user_email: localStorage.getItem('tryit_user') || 'admin',
+      action: current ? 'FEATURE_DISABLED' : 'FEATURE_ENABLED',
+      details: { feature_id: id }
+    }]);
+    setSaving(null);
+    fetchData();
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-gray-500" size={40}/></div>;
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 animate-fade-up">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <Settings className="text-blue-500" size={32} /> Platform Settings
-          </h1>
-          <p className="text-gray-500">Control platform-wide features and emergency kill-switches.</p>
-        </div>
-        {saving && <div className="text-sm font-bold text-green-500 flex items-center gap-2"><RefreshCw className="animate-spin" size={16}/> Saving...</div>}
+      <div>
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><Settings className="text-gray-500" size={32}/> System Settings</h1>
+        <p className="text-gray-500">All changes are logged in the audit trail. Super Admin only.</p>
       </div>
 
-      {/* Warning Banner if Maintenance Mode is ON */}
-      {settings['maintenance_mode']?.value && (
-        <div className="bg-red-500/10 border border-red-500/30 p-4 rounded-2xl flex items-start gap-3 animate-pulse">
-          <AlertTriangle className="text-red-500 mt-0.5" size={24} />
-          <div>
-            <h3 className="font-bold text-red-500">Platform is in Maintenance Mode</h3>
-            <p className="text-sm text-red-400">Students cannot access the platform right now. Turn this off to restore access.</p>
-          </div>
-        </div>
-      )}
-
-      {/* Settings List */}
-      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-6 shadow-xl space-y-4">
-        {settingConfig.map((config) => {
-          const setting = settings[config.key];
-          if (!setting) return null;
-          
-          return (
-            <div key={config.key} className="flex items-center justify-between p-4 bg-[var(--background)] border border-[var(--card-border)] rounded-2xl">
-              <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-xl ${config.bg} ${config.color}`}>
-                  <config.icon size={24} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-[var(--foreground)]">{config.title}</h3>
-                  <p className="text-xs text-gray-500 mt-1 max-w-md">{config.desc}</p>
-                </div>
-              </div>
-              
-              <button 
-                onClick={() => toggleSetting(config.key, setting.value)}
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none ${setting.value ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-700'}`}
-              >
-                <span className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${setting.value ? 'translate-x-7' : 'translate-x-1'}`} />
-              </button>
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+        <h2 className="font-bold mb-4 flex items-center gap-2"><Sliders size={18} className="text-blue-500"/> Fraud Detection Thresholds</h2>
+        {thresholds.length === 0 ? (
+          <p className="text-gray-500 text-sm">No thresholds configured. Add them via Supabase SQL Editor.</p>
+        ) : thresholds.map(t => (
+          <div key={t.id} className="flex items-center justify-between py-3 border-b border-[var(--card-border)] last:border-0">
+            <div>
+              <p className="font-bold text-sm">{t.name}</p>
+              <p className="text-xs text-gray-500">{t.description}</p>
             </div>
-          );
-        })}
+            <div className="flex items-center gap-3">
+              <input type="number" defaultValue={t.value}
+                onBlur={e => updateThreshold(t.id, parseFloat(e.target.value))}
+                className="w-24 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:border-blue-500"/>
+              {saving === t.id && <RefreshCw size={14} className="animate-spin text-blue-500"/>}
+            </div>
+          </div>
+        ))}
       </div>
 
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+        <h2 className="font-bold mb-4 flex items-center gap-2"><Shield size={18} className="text-green-500"/> Feature Flags</h2>
+        {features.length === 0 ? (
+          <p className="text-gray-500 text-sm">No feature flags configured yet.</p>
+        ) : features.map(f => (
+          <div key={f.id} className="flex items-center justify-between py-3 border-b border-[var(--card-border)] last:border-0">
+            <div>
+              <p className="font-bold text-sm">{f.name}</p>
+              <p className="text-xs text-gray-500">{f.description}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <button onClick={() => toggleFeature(f.id, f.is_enabled)}
+                className={`relative w-12 h-6 rounded-full transition-colors ${f.is_enabled ? 'bg-green-500' : 'bg-gray-300'}`}>
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${f.is_enabled ? 'left-7' : 'left-1'}`}/>
+              </button>
+              {saving === f.id && <RefreshCw size={14} className="animate-spin text-green-500"/>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-6">
+        <h2 className="font-bold mb-4 flex items-center gap-2"><Database size={18} className="text-purple-500"/> Platform Settings</h2>
+        {settings.length === 0 ? (
+          <p className="text-gray-500 text-sm">No platform settings configured yet.</p>
+        ) : settings.map(s => (
+          <div key={s.id} className="flex items-center justify-between py-3 border-b border-[var(--card-border)] last:border-0">
+            <div>
+              <p className="font-bold text-sm font-mono">{s.key}</p>
+              <p className="text-xs text-gray-500">{s.description}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input defaultValue={s.value}
+                onBlur={e => updateSetting(s.id, e.target.value)}
+                className="w-48 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-purple-500"/>
+              {saving === s.id && <Save size={14} className="text-purple-500"/>}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

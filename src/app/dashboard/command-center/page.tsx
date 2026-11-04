@@ -1,161 +1,221 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  ShieldAlert, Zap, Calendar, RefreshCw, CheckCircle2, 
-  XCircle, IndianRupee, Bell, Users, AlertOctagon, FileText
-} from 'lucide-react';
+import { ShieldAlert, Zap, Calendar, RefreshCw, CheckCircle2, IndianRupee, Bell, Users, AlertOctagon, FileText, Clock } from 'lucide-react';
 
 export default function CommandCenter() {
   const [activeTab, setActiveTab] = useState<'ops' | 'finance' | 'content'>('ops');
   const [loading, setLoading] = useState(true);
-
-  // Ops State
   const [battleMode, setBattleMode] = useState(false);
   const [exams, setExams] = useState<any[]>([]);
   const [duplicates, setDuplicates] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
-
-  // Finance State
   const [refunds, setRefunds] = useState<any[]>([]);
   const [payrolls, setPayrolls] = useState<any[]>([]);
+  const [syllabus, setSyllabus] = useState<any[]>([]);
+  const [cohorts, setCohorts] = useState<any[]>([]);
+  const [togglingBattle, setTogglingBattle] = useState(false);
+  const user = localStorage.getItem('tryit_user') || '';
 
   const fetchData = async () => {
     setLoading(true);
-    const [b, e, d, t, r, p] = await Promise.all([
+    const [b, e, d, t, r, p, s, c] = await Promise.all([
       supabase.from('platform_controls').select('*').eq('id', 'battle_mode').maybeSingle(),
-      supabase.from('exam_calendar').select('*').order('event_date', { ascending: true }),
-      supabase.from('duplicate_account_flags').select('*').limit(10),
+      supabase.from('exam_countdown').select('*').limit(5),
+      supabase.from('duplicate_account_flags').select('*').limit(5),
       supabase.from('notification_templates').select('*').limit(5),
-      supabase.from('refund_requests').select('*').eq('status', 'initiated'),
-      supabase.from('payroll_approvals').select('*').eq('status', 'pending')
+      supabase.from('refund_requests').select('*').eq('status', 'initiated').limit(5),
+      supabase.from('payroll_approvals').select('*').eq('status', 'pending').limit(5),
+      supabase.from('syllabus_maps').select('*').limit(5),
+      supabase.from('cohort_outcomes').select('*').limit(5),
     ]);
-    
-    if (b.data) setBattleMode(b.data.is_active);
+    if (b.data) setBattleMode(b.data.is_active || false);
     if (e.data) setExams(e.data);
     if (d.data) setDuplicates(d.data);
     if (t.data) setTemplates(t.data);
     if (r.data) setRefunds(r.data);
     if (p.data) setPayrolls(p.data);
-    
+    if (s.data) setSyllabus(s.data);
+    if (c.data) setCohorts(c.data);
     setLoading(false);
   };
 
   useEffect(() => { fetchData(); }, []);
 
   const toggleBattleMode = async () => {
-    const newMode = !battleMode;
-    setBattleMode(newMode);
-    await supabase.from('platform_controls').update({ is_active: newMode }).eq('id', 'battle_mode');
+    setTogglingBattle(true);
+    const newState = !battleMode;
+    await supabase.from('platform_controls').upsert([{ id: 'battle_mode', is_active: newState, updated_by: user, updated_at: new Date().toISOString() }]);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: newState ? 'BATTLE_MODE_ACTIVATED' : 'BATTLE_MODE_DEACTIVATED', details: { timestamp: new Date().toISOString() } }]);
+    setBattleMode(newState);
+    setTogglingBattle(false);
   };
 
   const approveRefund = async (id: string) => {
-    await supabase.from('refund_requests').update({ status: 'approved' }).eq('id', id);
+    await supabase.from('refund_requests').update({ status: 'approved', reviewed_by: user }).eq('id', id);
     fetchData();
   };
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
+  const approvePayroll = async (id: string) => {
+    await supabase.from('payroll_approvals').update({ status: 'approved', approved_by: user, approved_at: new Date().toISOString() }).eq('id', id);
+    fetchData();
+  };
+
+  const tabs = [
+    { id: 'ops' as const, label: 'Operations' },
+    { id: 'finance' as const, label: 'Finance Queue' },
+    { id: 'content' as const, label: 'Content' },
+  ];
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-red-500" size={40}/></div>;
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 animate-fade-up">
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-center bg-[var(--card-bg)] p-4 rounded-3xl border border-[var(--card-border)] shadow-xl gap-4">
-        <div className="flex items-center gap-3">
-          <ShieldAlert className="text-red-500" size={28} />
-          <h1 className="text-2xl font-bold text-[var(--foreground)]">Super Admin Command Center</h1>
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><ShieldAlert className="text-red-600" size={32}/> Command Center</h1>
+          <p className="text-gray-500">Battle mode, exam calendar, duplicates, refunds, and payroll approvals.</p>
         </div>
-        <div className="flex bg-[var(--background)] p-1 rounded-xl border border-[var(--card-border)]">
-          <button onClick={() => setActiveTab('ops')} className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'ops' ? 'bg-blue-600 text-white shadow-md' : 'text-gray-500'}`}>System Ops</button>
-          <button onClick={() => setActiveTab('finance')} className={`px-6 py-2 rounded-lg font-bold text-sm transition-all ${activeTab === 'finance' ? 'bg-green-600 text-white shadow-md' : 'text-gray-500'}`}>Finance & HR</button>
+        <button onClick={fetchData} className="p-2.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-gray-500">
+          <RefreshCw size={20} className={loading ? 'animate-spin' : ''}/>
+        </button>
+      </div>
+
+      <div className={`rounded-2xl p-6 border-2 ${battleMode ? 'bg-red-500/10 border-red-500' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-xl ${battleMode ? 'bg-red-500 animate-pulse' : 'bg-gray-500/10'}`}>
+              <Zap size={28} className={battleMode ? 'text-white' : 'text-gray-500'}/>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Battle Mode</h2>
+              <p className="text-sm text-gray-500">
+                {battleMode
+                  ? '🔴 ACTIVE — Non-critical routes intercepted, DB routed to CRM, auto-replies enabled'
+                  : '⚪ Standby — Activate on exam result days or traffic surges'}
+              </p>
+            </div>
+          </div>
+          <button onClick={toggleBattleMode} disabled={togglingBattle}
+            className={`px-8 py-3 rounded-xl font-black text-sm transition-all disabled:opacity-50 ${
+              battleMode ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/40' : 'bg-gray-900 dark:bg-white dark:text-gray-900 text-white hover:opacity-80'
+            }`}>
+            {togglingBattle ? 'Switching...' : battleMode ? '🔴 DEACTIVATE' : '⚡ ACTIVATE BATTLE MODE'}
+          </button>
         </div>
       </div>
 
-      {/* OPS TAB */}
+      <div className="flex gap-2">
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold ${activeTab === tab.id ? 'bg-red-600 text-white' : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-gray-500'}`}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {activeTab === 'ops' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          
-          {/* Battle Mode */}
-          <div className={`p-6 rounded-3xl border shadow-sm transition-colors ${battleMode ? 'bg-red-500/10 border-red-500/30' : 'bg-[var(--card-bg)] border-[var(--card-border)]'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg flex items-center gap-2"><Zap className={battleMode ? 'text-red-500' : 'text-gray-400'} /> Battle Mode</h3>
-              <button onClick={toggleBattleMode} className={`w-14 h-8 rounded-full transition-colors relative ${battleMode ? 'bg-red-500' : 'bg-gray-300'}`}>
-                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${battleMode ? 'left-7' : 'left-1'}`} />
-              </button>
-            </div>
-            <p className="text-sm text-gray-500">Disables non-critical modules and routes all database connections to CRM and Exam Engine.</p>
-          </div>
-
-          {/* Exam Calendar */}
-          <div className="bg-[var(--card-bg)] p-6 rounded-3xl border border-[var(--card-border)] shadow-sm">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4"><Calendar className="text-blue-500" /> Exam Surge Calendar</h3>
-            <div className="space-y-2">
-              {exams.length === 0 ? <p className="text-sm text-gray-500">No upcoming exams.</p> : exams.map(e => (
-                <div key={e.id} className="flex justify-between items-center p-2 bg-[var(--background)] rounded-lg border border-[var(--card-border)]">
-                  <span className="font-medium text-sm">{e.exam_name} ({e.event_type})</span>
-                  <span className="text-xs font-bold text-gray-500">{new Date(e.event_date).toLocaleDateString()}</span>
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><Calendar size={18} className="text-blue-500"/> Exam Countdown</h2>
+            {exams.length === 0 ? <p className="text-gray-500 text-sm">No upcoming exams</p>
+              : exams.map(e => (
+                <div key={e.exam_name} className={`flex items-center justify-between p-3 rounded-xl mb-2 ${e.urgency_level === 'CRITICAL' ? 'bg-red-500/10 border border-red-500/30' : 'bg-[var(--background)]'}`}>
+                  <div>
+                    <p className="font-bold text-sm">{e.exam_name}</p>
+                    <p className="text-xs text-gray-500">{e.exam_body}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-black ${e.days_to_exam <= 7 ? 'text-red-500' : e.days_to_exam <= 30 ? 'text-orange-500' : 'text-blue-500'}`}>{e.days_to_exam}</p>
+                    <p className="text-xs text-gray-500">days</p>
+                  </div>
                 </div>
               ))}
-            </div>
           </div>
 
-          {/* Duplicate Scanner */}
-          <div className="bg-[var(--card-bg)] p-6 rounded-3xl border border-[var(--card-border)] shadow-sm">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4"><Users className="text-purple-500" /> Duplicate Account Flags</h3>
-            {duplicates.length === 0 ? <p className="text-sm text-gray-500">No duplicate accounts detected.</p> : duplicates.map(d => (
-              <div key={d.id} className="flex justify-between items-center p-2 bg-[var(--background)] rounded-lg mb-2 border border-[var(--card-border)]">
-                <span className="text-sm"><span className="text-blue-500">{d.primary_email}</span> linked to <span className="text-red-500">{d.linked_email}</span></span>
-                <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-1 rounded">{d.signal_type}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Notification Templates */}
-          <div className="bg-[var(--card-bg)] p-6 rounded-3xl border border-[var(--card-border)] shadow-sm">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4"><Bell className="text-yellow-500" /> Notification Templates</h3>
-            {templates.map(t => (
-              <div key={t.id} className="mb-3">
-                <p className="text-xs font-bold text-gray-500 uppercase">{t.template_name}</p>
-                <textarea className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-lg p-2 text-sm mt-1" defaultValue={t.message_body} />
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><Users size={18} className="text-orange-500"/> Duplicate Accounts</h2>
+            {duplicates.length === 0 ? (
+              <div className="text-center py-6"><CheckCircle2 className="text-green-500 mx-auto mb-2" size={28}/><p className="text-sm text-gray-500">No duplicate flags</p></div>
+            ) : duplicates.map(d => (
+              <div key={d.id} className="p-3 bg-orange-500/5 border border-orange-500/20 rounded-xl mb-2">
+                <p className="font-bold text-sm text-xs">{d.email_1} ↔ {d.email_2}</p>
+                <p className="text-xs text-gray-500">{d.match_type} · {d.match_score}% match</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* FINANCE TAB */}
       {activeTab === 'finance' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Refund State Machine */}
-          <div className="bg-[var(--card-bg)] p-6 rounded-3xl border border-[var(--card-border)] shadow-sm">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4"><IndianRupee className="text-green-500" /> Pending Refunds</h3>
-            {refunds.length === 0 ? <p className="text-sm text-gray-500">No pending refunds.</p> : refunds.map(r => (
-              <div key={r.id} className="flex justify-between items-center p-3 bg-[var(--background)] rounded-xl mb-2 border border-[var(--card-border)]">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><IndianRupee size={18} className="text-green-500"/> Pending Refunds</h2>
+            {refunds.length === 0 ? (
+              <div className="text-center py-6"><CheckCircle2 className="text-green-500 mx-auto mb-2" size={28}/><p className="text-sm text-gray-500">No pending refunds</p></div>
+            ) : refunds.map(r => (
+              <div key={r.id} className="flex items-center justify-between p-3 bg-[var(--background)] rounded-xl mb-2">
                 <div>
-                  <p className="font-bold text-sm">{r.student_email}</p>
-                  <p className="text-xs text-gray-500">Refund: ₹{r.amount}</p>
+                  <p className="font-bold text-sm">{r.user_email || r.student_email}</p>
+                  <p className="text-xs text-gray-500">{r.reason}</p>
                 </div>
-                <button onClick={() => approveRefund(r.id)} className="bg-green-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-green-600">Approve</button>
+                <div className="flex items-center gap-2">
+                  {r.amount && <span className="font-black text-green-500">₹{r.amount}</span>}
+                  <button onClick={() => approveRefund(r.id)} className="px-2 py-1 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg text-xs font-bold">
+                    Approve
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          {/* 4-Eyes Payroll */}
-          <div className="bg-[var(--card-bg)] p-6 rounded-3xl border border-[var(--card-border)] shadow-sm">
-            <h3 className="font-bold text-lg flex items-center gap-2 mb-4"><FileText className="text-purple-500" /> Payroll Approvals (4-Eyes Check)</h3>
-            {payrolls.length === 0 ? <p className="text-sm text-gray-500">No payrolls pending approval.</p> : payrolls.map(p => (
-              <div key={p.id} className="p-3 bg-[var(--background)] rounded-xl mb-2 border border-[var(--card-border)]">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold">{p.month} Payroll</span>
-                  <span className="text-sm font-bold text-green-600">₹{p.total_amount}</span>
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><Clock size={18} className="text-purple-500"/> Payroll Approvals</h2>
+            {payrolls.length === 0 ? (
+              <div className="text-center py-6"><CheckCircle2 className="text-green-500 mx-auto mb-2" size={28}/><p className="text-sm text-gray-500">No pending payroll approvals</p></div>
+            ) : payrolls.map(p => (
+              <div key={p.id} className="flex items-center justify-between p-3 bg-[var(--background)] rounded-xl mb-2">
+                <div>
+                  <p className="font-bold text-sm">{p.mentor_email || p.staff_email}</p>
+                  <p className="text-xs text-gray-500">Period: {p.period || 'Monthly'}</p>
                 </div>
-                <div className="flex justify-between text-xs text-gray-500 mb-3">
-                  <span>Calculated by: {p.calculated_by}</span>
-                  <span>Status: {p.status}</span>
+                <div className="flex items-center gap-2">
+                  {p.amount && <span className="font-black text-purple-500">₹{p.amount}</span>}
+                  <button onClick={() => approvePayroll(p.id)} className="px-2 py-1 bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white rounded-lg text-xs font-bold">
+                    Approve
+                  </button>
                 </div>
-                <button className="w-full bg-blue-500 text-white py-1.5 rounded-lg text-sm font-bold hover:bg-blue-600">Approve as Second Admin</button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'content' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><FileText size={18} className="text-teal-500"/> Syllabus Maps</h2>
+            {syllabus.length === 0 ? <p className="text-gray-500 text-sm">No syllabus data</p>
+              : syllabus.map(s => (
+                <div key={s.id} className="p-3 bg-[var(--background)] rounded-xl mb-2">
+                  <p className="font-bold text-sm">{s.exam_name || s.exam_id}</p>
+                  <p className="text-xs text-gray-500">{s.chapter_name} · {s.version || 'v1'}</p>
+                </div>
+              ))}
+          </div>
+
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-5">
+            <h2 className="font-bold mb-4 flex items-center gap-2"><AlertOctagon size={18} className="text-blue-500"/> Cohort Outcomes</h2>
+            {cohorts.length === 0 ? <p className="text-gray-500 text-sm text-center py-6">No cohort outcomes yet. Students self-report when they clear exams.</p>
+              : cohorts.map(c => (
+                <div key={c.id} className="p-3 bg-[var(--background)] rounded-xl mb-2 flex justify-between">
+                  <div>
+                    <p className="font-bold text-sm">{c.student_email}</p>
+                    <p className="text-xs text-gray-500">{c.exam_name}</p>
+                  </div>
+                  <span className="text-xs text-green-500 font-bold">{c.result}</span>
+                </div>
+              ))}
           </div>
         </div>
       )}

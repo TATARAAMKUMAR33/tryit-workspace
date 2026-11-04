@@ -1,184 +1,193 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  ShieldAlert, Flag, Trash2, EyeOff, UserX, 
-  CheckCircle, RefreshCw, AlertOctagon, CheckSquare
-} from 'lucide-react';
+import { Flag, RefreshCw, CheckCircle2, XCircle, Eye, Search, AlertTriangle } from 'lucide-react';
 
-export default function ModerationHub() {
-  const [activeTab, setActiveTab] = useState<'reports' | 'bans'>('reports');
-  const [reportedPosts, setReportedPosts] = useState<any[]>([]);
-  const [bannedUsers, setBannedUsers] = useState<any[]>([]);
+export default function Moderation() {
+  const [reports, setReports] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  
-  // Bulk Selection State
-  const [selectedPosts, setSelectedPosts] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('reports');
+  const [showIncidentForm, setShowIncidentForm] = useState(false);
+  const [incidentForm, setIncidentForm] = useState({ incident_type: 'paper_leak', severity: 'high', description: '', affected_exam: '' });
+  const user = localStorage.getItem('tryit_user') || '';
 
   const fetchData = async () => {
     setLoading(true);
-    const { data: reports } = await supabase.from('bharat_pulse').select('*').gt('report_count', 0).order('report_count', { ascending: false });
-    const { data: bans } = await supabase.from('user_bans').select('*').order('created_at', { ascending: false });
-    if (reports) setReportedPosts(reports);
-    if (bans) setBannedUsers(bans);
+    const [r, i] = await Promise.all([
+      supabase.from('bharat_pulse').select('*').gt('report_count', 0).order('report_count', { ascending: false }),
+      supabase.from('security_incidents').select('*').order('created_at', { ascending: false }).limit(20),
+    ]);
+    if (r.data) setReports(r.data);
+    if (i.data) setIncidents(i.data);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  const togglePostSelection = (id: string) => {
-    setSelectedPosts(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
-  };
-
-  const handleBulkHide = async () => {
-    if (selectedPosts.length === 0) return;
-    await supabase.from('bharat_pulse').update({ is_hidden: true }).in('id', selectedPosts);
-    setSelectedPosts([]);
+  const moderatePost = async (id: string, action: 'remove' | 'clear') => {
+    if (action === 'remove') {
+      await supabase.from('bharat_pulse').delete().eq('id', id);
+      await supabase.from('audit_logs').insert([{ user_email: user, action: 'POST_REMOVED', details: { post_id: id } }]);
+    } else {
+      await supabase.from('bharat_pulse').update({ report_count: 0 }).eq('id', id);
+    }
     fetchData();
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedPosts.length === 0) return;
-    if (!confirm(`Permanently delete ${selectedPosts.length} posts?`)) return;
-    await supabase.from('bharat_pulse').delete().in('id', selectedPosts);
-    setSelectedPosts([]);
+  const createIncident = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('security_incidents').insert([{ ...incidentForm, reported_by: user }]);
+    setIncidentForm({ incident_type: 'paper_leak', severity: 'high', description: '', affected_exam: '' });
+    setShowIncidentForm(false);
     fetchData();
   };
 
-  const handleBanUser = async (email: string, type: string) => {
-    const reason = prompt(`Enter reason for banning ${email}:`);
-    if (!reason) return;
-    await supabase.from('user_bans').upsert([{ user_email: email, reason: reason, ban_type: type }], { onConflict: 'user_email' });
-    alert(`${email} has been banned (${type}).`);
+  const updateIncidentStatus = async (id: string, status: string) => {
+    await supabase.from('security_incidents').update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null }).eq('id', id);
     fetchData();
   };
 
-  const handleUnban = async (email: string) => {
-    await supabase.from('user_bans').delete().eq('user_email', email);
-    fetchData();
-  };
+  const filtered = reports.filter(r => !search || r.content?.toLowerCase().includes(search.toLowerCase()) || r.author_email?.includes(search));
 
-  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>;
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-amber-500" size={40}/></div>;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-fade-up pb-24 relative">
-      
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <ShieldAlert className="text-red-500" size={32} /> Moderation Hub
-          </h1>
-          <p className="text-gray-500">Review reported content and enforce platform discipline.</p>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><Flag className="text-amber-500" size={32}/> Trust & Safety</h1>
+          <p className="text-gray-500">{reports.length} reported posts · {incidents.filter(i => i.status === 'investigating').length} active incidents</p>
         </div>
-        <div className="flex bg-[var(--card-bg)] p-1 rounded-xl border border-[var(--card-border)]">
-          <button onClick={() => setActiveTab('reports')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'reports' ? 'bg-red-500 text-white shadow-md' : 'text-gray-500'}`}>
-            <Flag size={16} /> Reports
-          </button>
-          <button onClick={() => setActiveTab('bans')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'bans' ? 'bg-red-500 text-white shadow-md' : 'text-gray-500'}`}>
-            <UserX size={16} /> Bans
-          </button>
+        <button onClick={() => setShowIncidentForm(!showIncidentForm)} className="bg-red-600 hover:bg-red-500 text-white font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
+          <AlertTriangle size={18}/> Log Incident
+        </button>
+      </div>
+
+      {showIncidentForm && (
+        <div className="bg-[var(--card-bg)] border border-red-500/30 rounded-2xl p-6">
+          <h2 className="font-bold mb-4 text-red-500">Log Security Incident</h2>
+          <form onSubmit={createIncident} className="grid grid-cols-2 gap-4">
+            <select value={incidentForm.incident_type} onChange={e => setIncidentForm(p => ({ ...p, incident_type: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="paper_leak">Question Paper Leak</option>
+              <option value="data_breach">Data Breach</option>
+              <option value="unauthorized_access">Unauthorized Access</option>
+              <option value="cheating_organized">Organized Cheating</option>
+              <option value="impersonation">Impersonation</option>
+            </select>
+            <select value={incidentForm.severity} onChange={e => setIncidentForm(p => ({ ...p, severity: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none">
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <input placeholder="Affected exam (optional)" value={incidentForm.affected_exam}
+              onChange={e => setIncidentForm(p => ({ ...p, affected_exam: e.target.value }))}
+              className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-red-500"/>
+            <div/>
+            <textarea required placeholder="Describe the incident *" value={incidentForm.description}
+              onChange={e => setIncidentForm(p => ({ ...p, description: e.target.value }))}
+              className="col-span-2 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 resize-none h-24"/>
+            <div className="col-span-2 flex gap-3">
+              <button type="submit" className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl">Log Incident</button>
+              <button type="button" onClick={() => setShowIncidentForm(false)} className="px-6 bg-gray-500/10 text-gray-500 font-bold rounded-xl">Cancel</button>
+            </div>
+          </form>
         </div>
+      )}
+
+      <div className="flex gap-2">
+        {[
+          { id: 'reports', label: `Reported Posts (${reports.length})` },
+          { id: 'incidents', label: `Security Incidents (${incidents.length})` },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold ${activeTab === tab.id ? 'bg-amber-500 text-white' : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-gray-500'}`}>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {activeTab === 'reports' && (
-        <div className="space-y-4">
-          {reportedPosts.length === 0 ? (
-            <div className="text-center py-20 bg-[var(--card-bg)] rounded-3xl border border-[var(--card-border)]">
-              <CheckCircle size={48} className="text-green-500 mx-auto mb-4" />
-              <h3 className="text-xl font-bold">All Clear!</h3>
-              <p className="text-gray-500">No reported posts to review.</p>
-            </div>
-          ) : (
-            reportedPosts.map(post => (
-              <div key={post.id} className={`bg-[var(--card-bg)] border rounded-3xl p-6 shadow-lg flex gap-6 transition-all ${selectedPosts.includes(post.id) ? 'border-blue-500' : 'border-red-500/30'}`}>
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
-                    <input 
-                      type="checkbox" 
-                      checked={selectedPosts.includes(post.id)}
-                      onChange={() => togglePostSelection(post.id)}
-                      className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-500 font-bold">
-                      {post.author_email[0].toUpperCase()}
+        <>
+          <div className="relative">
+            <Search className="absolute left-3 top-2.5 text-gray-400" size={18}/>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search reported posts..."
+              className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-amber-500"/>
+          </div>
+          <div className="space-y-3">
+            {filtered.length === 0 ? (
+              <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-12 text-center">
+                <CheckCircle2 size={40} className="text-green-500 mx-auto mb-3"/>
+                <p className="font-bold">No reported posts</p>
+              </div>
+            ) : filtered.map(post => (
+              <div key={post.id} className="bg-[var(--card-bg)] border border-orange-500/30 rounded-2xl p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs font-bold bg-orange-500/10 text-orange-500 px-2 py-1 rounded">{post.report_count} reports</span>
+                      <span className="text-xs text-gray-500">{post.author_email} · {post.author_role}</span>
                     </div>
-                    <div>
-                      <p className="font-bold text-[var(--foreground)]">{post.author_email.split('@')[0]}</p>
-                      <p className="text-xs text-gray-500">{post.author_role.replace('_', ' ')}</p>
-                    </div>
-                    <div className="ml-auto bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
-                      <Flag size={12} /> {post.report_count} Reports
-                    </div>
+                    <p className="text-sm">{post.content}</p>
                   </div>
-                  <p className="text-[var(--foreground)] bg-[var(--background)] p-4 rounded-xl border border-[var(--card-border)]">{post.content}</p>
-                </div>
-                <div className="w-48 flex flex-col justify-center gap-2 border-l border-[var(--card-border)] pl-6">
-                  <p className="text-xs font-bold text-gray-500 uppercase mb-2">Quick Actions</p>
-                  <button onClick={() => handleBanUser(post.author_email, '24h')} className="w-full bg-gray-500/10 text-gray-600 hover:bg-gray-800 hover:text-white py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors">
-                    <UserX size={16} /> Ban 24h
-                  </button>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => moderatePost(post.id, 'clear')}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg text-xs font-bold">
+                      <CheckCircle2 size={14}/> Clear
+                    </button>
+                    <button onClick={() => moderatePost(post.id, 'remove')}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white hover:bg-red-600 rounded-lg text-xs font-bold">
+                      <XCircle size={14}/> Remove
+                    </button>
+                  </div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeTab === 'bans' && (
-        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-xl">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[var(--background)]/50 text-gray-500 text-xs uppercase tracking-wider">
-                <th className="p-5 font-semibold">User Email</th>
-                <th className="p-5 font-semibold">Ban Type</th>
-                <th className="p-5 font-semibold">Reason</th>
-                <th className="p-5 font-semibold">Date</th>
-                <th className="p-5 font-semibold text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--card-border)]">
-              {bannedUsers.length === 0 ? (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-500">No users are currently banned.</td></tr>
-              ) : (
-                bannedUsers.map(ban => (
-                  <tr key={ban.id} className="hover:bg-[var(--background)]/30 transition-colors">
-                    <td className="p-5 font-semibold text-red-500 flex items-center gap-2"><AlertOctagon size={16} /> {ban.user_email}</td>
-                    <td className="p-5"><span className={`px-2 py-1 rounded text-xs font-bold uppercase ${ban.ban_type === 'permanent' ? 'bg-red-500/10 text-red-500' : 'bg-orange-500/10 text-orange-500'}`}>{ban.ban_type}</span></td>
-                    <td className="p-5 text-sm text-gray-600 dark:text-gray-300">{ban.reason}</td>
-                    <td className="p-5 text-sm text-gray-500">{new Date(ban.created_at).toLocaleDateString()}</td>
-                    <td className="p-5 text-right">
-                      <button onClick={() => handleUnban(ban.user_email)} className="px-4 py-1.5 bg-green-500/10 text-green-600 hover:bg-green-500 hover:text-white rounded-lg text-xs font-bold transition-colors">Unban User</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Floating Bulk Action Bar */}
-      {selectedPosts.length > 0 && activeTab === 'reports' && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-40 animate-fade-up border border-slate-700">
-          <div className="flex items-center gap-2 font-bold">
-            <CheckSquare size={20} className="text-blue-400" />
-            {selectedPosts.length} Posts Selected
+            ))}
           </div>
-          <div className="h-6 w-px bg-slate-700"></div>
-          <div className="flex gap-2">
-            <button onClick={handleBulkHide} className="px-4 py-2 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500 hover:text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2">
-              <EyeOff size={16}/> Hide All
-            </button>
-            <button onClick={handleBulkDelete} className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2">
-              <Trash2 size={16}/> Delete All
-            </button>
-          </div>
-          <button onClick={() => setSelectedPosts([])} className="text-gray-400 hover:text-white ml-2">✕</button>
-        </div>
+        </>
       )}
 
+      {activeTab === 'incidents' && (
+        <div className="space-y-3">
+          {incidents.length === 0 ? (
+            <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-12 text-center">
+              <CheckCircle2 size={40} className="text-green-500 mx-auto mb-3"/>
+              <p className="font-bold">No security incidents logged</p>
+            </div>
+          ) : incidents.map(inc => (
+            <div key={inc.id} className={`bg-[var(--card-bg)] border rounded-2xl p-5 ${
+              inc.status === 'investigating' ? 'border-red-500/30' : 'border-[var(--card-border)]'
+            }`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-[10px] font-bold px-2 py-1 rounded ${
+                      inc.severity === 'critical' ? 'bg-red-500 text-white' :
+                      inc.severity === 'high' ? 'bg-orange-500/20 text-orange-500' :
+                      'bg-yellow-500/20 text-yellow-500'
+                    }`}>{inc.severity.toUpperCase()}</span>
+                    <span className="text-xs font-bold text-gray-600">{inc.incident_type.replace(/_/g, ' ').toUpperCase()}</span>
+                    <span className={`text-xs font-bold ${inc.status === 'resolved' ? 'text-green-500' : 'text-red-500'}`}>{inc.status}</span>
+                  </div>
+                  <p className="text-sm">{inc.description}</p>
+                  {inc.affected_exam && <p className="text-xs text-gray-500 mt-1">Exam: {inc.affected_exam}</p>}
+                  <p className="text-xs text-gray-400 mt-1">Reported by {inc.reported_by} · {new Date(inc.created_at).toLocaleString()}</p>
+                </div>
+                {inc.status === 'investigating' && (
+                  <button onClick={() => updateIncidentStatus(inc.id, 'resolved')}
+                    className="px-3 py-1.5 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg text-xs font-bold shrink-0">
+                    Mark Resolved
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

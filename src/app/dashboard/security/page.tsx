@@ -1,202 +1,189 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import {
-  ShieldAlert,
-  ShieldX,
-  Trash2,
-  Search,
-  RefreshCw,
-  AlertOctagon,
-  Globe,
-  CheckCircle2
-} from 'lucide-react';;
+import { ShieldX, RefreshCw, Ban, CheckCircle2, Search, Smartphone, Globe, AlertTriangle } from 'lucide-react';
 
 export default function SecurityCenter() {
-  const [activeTab, setActiveTab] = useState<'privacy' | 'ip'>('privacy');
-  const [loading, setLoading] = useState(false);
-  
-  // Privacy State
-  const [searchEmail, setSearchEmail] = useState('');
-  const [wipeConfirm, setWipeConfirm] = useState(false);
-  const [wipeStatus, setWipeStatus] = useState('');
-
-  // IP Ban State
   const [bans, setBans] = useState<any[]>([]);
-  const [newIp, setNewIp] = useState('');
-  const [ipReason, setIpReason] = useState('');
+  const [ipBans, setIpBans] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [activeTab, setActiveTab] = useState('bans');
+  const [banForm, setBanForm] = useState({ user_email: '', reason: '', ban_type: 'permanent' });
+  const [ipForm, setIpForm] = useState({ ip_address: '', reason: '' });
+  const user = localStorage.getItem('tryit_user') || '';
 
-  const fetchBans = async () => {
-    const { data } = await supabase.from('ip_bans').select('*').order('created_at', { ascending: false });
-    if (data) setBans(data);
-  };
-
-  useEffect(() => {
-    if (activeTab === 'ip') fetchBans();
-  }, [activeTab]);
-
-  // --- ACTIONS ---
-  const handleWipeData = async () => {
-    if (!searchEmail.trim()) return;
-    if (!wipeConfirm) {
-      setWipeConfirm(true);
-      return;
-    }
-
+  const fetchData = async () => {
     setLoading(true);
-    setWipeStatus('Wiping all data...');
-    
-    // Call the PostgreSQL function
-    const { error } = await supabase.rpc('wipe_user_data', { target_email: searchEmail });
-    
-    if (error) {
-      setWipeStatus(`❌ Error: ${error.message}`);
-    } else {
-      setWipeStatus(`✅ Successfully erased all data for ${searchEmail}`);
-      setSearchEmail('');
-    }
-    setWipeConfirm(false);
+    const [b, ip, s] = await Promise.all([
+      supabase.from('user_bans').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('ip_bans').select('*').order('created_at', { ascending: false }).limit(50),
+      supabase.from('active_sessions').select('*').order('last_heartbeat', { ascending: false }).limit(30),
+    ]);
+    if (b.data) setBans(b.data);
+    if (ip.data) setIpBans(ip.data);
+    if (s.data) setSessions(s.data);
     setLoading(false);
   };
 
-  const handleAddIpBan = async (e: React.FormEvent) => {
+  useEffect(() => { fetchData(); }, []);
+
+  const addBan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newIp.trim()) return;
-    
-    await supabase.from('ip_bans').insert([{ ip_address: newIp, reason: ipReason }]);
-    setNewIp(''); setIpReason('');
-    fetchBans();
+    await supabase.from('user_bans').upsert([{ ...banForm, banned_by: user }], { onConflict: 'user_email' });
+    await supabase.from('audit_logs').insert([{ user_email: user, action: 'USER_BANNED', details: banForm }]);
+    setBanForm({ user_email: '', reason: '', ban_type: 'permanent' });
+    fetchData();
   };
 
-  const removeIpBan = async (id: string) => {
-    await supabase.from('ip_bans').delete().eq('id', id);
-    fetchBans();
+  const addIpBan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('ip_bans').insert([{ ...ipForm, banned_by: user }]);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: 'IP_BANNED', details: ipForm }]);
+    setIpForm({ ip_address: '', reason: '' });
+    fetchData();
   };
+
+  const removeBan = async (id: string, email: string) => {
+    await supabase.from('user_bans').delete().eq('id', id);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: 'USER_UNBANNED', details: { target: email } }]);
+    fetchData();
+  };
+
+  const killSession = async (id: string, email: string) => {
+    await supabase.from('active_sessions').delete().eq('id', id);
+    await supabase.from('audit_logs').insert([{ user_email: user, action: 'SESSION_KILLED', details: { target_email: email } }]);
+    fetchData();
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-emerald-500" size={40}/></div>;
+
+  const filteredBans = bans.filter(b => !search || b.user_email?.includes(search));
+  const filteredIpBans = ipBans.filter(b => !search || b.ip_address?.includes(search));
+  const filteredSessions = sessions.filter(s => !search || s.user_email?.includes(search));
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 animate-fade-up">
-      
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <ShieldAlert className="text-red-500" size={32} /> Security & Privacy Center
-          </h1>
-          <p className="text-gray-500">Zero-trust data management and network firewall.</p>
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-up">
+      <div>
+        <h1 className="text-3xl font-bold mb-2 flex items-center gap-3"><ShieldX className="text-emerald-600" size={32}/> Security Center</h1>
+        <p className="text-gray-500">{bans.length} banned accounts · {ipBans.length} banned IPs · {sessions.length} active sessions</p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4">
+          <h3 className="font-bold mb-3 text-sm flex items-center gap-2"><Ban size={16} className="text-red-500"/> Ban Account</h3>
+          <form onSubmit={addBan} className="space-y-2">
+            <input required placeholder="User email" value={banForm.user_email} onChange={e => setBanForm(p => ({ ...p, user_email: e.target.value }))}
+              className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500"/>
+            <input required placeholder="Reason" value={banForm.reason} onChange={e => setBanForm(p => ({ ...p, reason: e.target.value }))}
+              className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500"/>
+            <div className="flex gap-2">
+              <select value={banForm.ban_type} onChange={e => setBanForm(p => ({ ...p, ban_type: e.target.value }))}
+                className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none">
+                <option value="permanent">Permanent</option>
+                <option value="temporary">Temporary (7 days)</option>
+                <option value="warning">Warning Only</option>
+              </select>
+              <button type="submit" className="px-4 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl text-sm">Ban</button>
+            </div>
+          </form>
         </div>
-        <div className="flex bg-[var(--card-bg)] p-1 rounded-xl border border-[var(--card-border)]">
-          <button onClick={() => setActiveTab('privacy')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'privacy' ? 'bg-red-500 text-white shadow-md' : 'text-gray-500'}`}>
-            <Trash2 size={16} /> Data Erasure
-          </button>
-          <button onClick={() => setActiveTab('ip')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'ip' ? 'bg-red-500 text-white shadow-md' : 'text-gray-500'}`}>
-            <Globe size={16} /> IP Blacklist
-          </button>
+
+        <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4">
+          <h3 className="font-bold mb-3 text-sm flex items-center gap-2"><Globe size={16} className="text-orange-500"/> Ban IP Address</h3>
+          <form onSubmit={addIpBan} className="space-y-2">
+            <input required placeholder="IP Address (e.g. 192.168.1.1)" value={ipForm.ip_address} onChange={e => setIpForm(p => ({ ...p, ip_address: e.target.value }))}
+              className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500"/>
+            <div className="flex gap-2">
+              <input required placeholder="Reason" value={ipForm.reason} onChange={e => setIpForm(p => ({ ...p, reason: e.target.value }))}
+                className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-500"/>
+              <button type="submit" className="px-4 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl text-sm">Ban IP</button>
+            </div>
+          </form>
         </div>
       </div>
 
-      {/* PRIVACY TAB */}
-      {activeTab === 'privacy' && (
-        <div className="bg-[var(--card-bg)] border border-red-500/30 rounded-3xl p-8 shadow-2xl">
-          <div className="flex items-center gap-4 mb-6 border-b border-[var(--card-border)] pb-6">
-            <div className="p-4 bg-red-500/10 rounded-2xl">
-              <ShieldX className="text-red-500" size={32} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-[var(--foreground)]">The "Right to be Forgotten"</h2>
-              <p className="text-sm text-gray-500">Instantly wipe a user from every table. This action is irreversible.</p>
-            </div>
-          </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-2.5 text-gray-400" size={18}/>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by email or IP..."
+          className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-emerald-500"/>
+      </div>
 
-          <div className="space-y-6 max-w-2xl">
-            <div>
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 block">Enter User Email</label>
-              <div className="relative">
-                <Search className="absolute left-4 top-3.5 text-gray-400" size={20} />
-                <input 
-                  type="email" 
-                  value={searchEmail}
-                  onChange={(e) => { setSearchEmail(e.target.value); setWipeConfirm(false); setWipeStatus(''); }}
-                  placeholder="user@gmail.com"
-                  className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-3 pl-12 pr-4 text-[var(--foreground)] focus:outline-none focus:border-red-500 transition-colors"
-                />
-              </div>
-            </div>
+      <div className="flex gap-2">
+        {[
+          { id: 'bans', label: `Banned Accounts (${bans.length})` },
+          { id: 'ip', label: `Banned IPs (${ipBans.length})` },
+          { id: 'sessions', label: `Active Sessions (${sessions.length})` },
+        ].map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-bold ${activeTab === tab.id ? 'bg-emerald-600 text-white' : 'bg-[var(--card-bg)] border border-[var(--card-border)] text-gray-500'}`}>
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-            {wipeConfirm && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-3 animate-fade-up">
-                <AlertOctagon className="text-red-500 mt-0.5" size={20} />
-                <div>
-                  <p className="font-bold text-red-500">Are you absolutely sure?</p>
-                  <p className="text-sm text-red-400/80 mb-3">This will permanently delete all doubts, tickets, exam scores, and chat messages for <strong>{searchEmail}</strong>.</p>
-                  <div className="flex gap-2">
-                    <button onClick={() => setWipeConfirm(false)} className="px-4 py-1.5 bg-gray-500/20 text-gray-500 font-bold rounded-lg text-sm">Cancel</button>
-                    <button onClick={handleWipeData} disabled={loading} className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg text-sm flex items-center gap-2">
-                      {loading ? <RefreshCw className="animate-spin" size={16}/> : 'Yes, Erase Everything'}
-                    </button>
+      <div className="space-y-3">
+        {activeTab === 'bans' && (
+          filteredBans.length === 0
+            ? <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-8 text-center"><CheckCircle2 size={32} className="text-green-500 mx-auto mb-2"/><p className="text-gray-500">No banned accounts</p></div>
+            : filteredBans.map(ban => (
+              <div key={ban.id} className="bg-[var(--card-bg)] border border-red-500/20 rounded-2xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Ban size={18} className="text-red-500"/>
+                  <div>
+                    <p className="font-bold text-sm">{ban.user_email}</p>
+                    <p className="text-xs text-gray-500">{ban.reason} · {ban.ban_type} · {new Date(ban.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
+                <button onClick={() => removeBan(ban.id, ban.user_email)} className="px-3 py-1.5 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-xl text-xs font-bold">
+                  Unban
+                </button>
               </div>
-            )}
+            ))
+        )}
 
-            {!wipeConfirm && (
-              <button onClick={handleWipeData} disabled={!searchEmail || loading} className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-red-500/20 disabled:opacity-50 transition-colors">
-                Execute Data Erasure
-              </button>
-            )}
-
-            {wipeStatus && (
-              <div className={`p-4 rounded-xl text-sm font-bold border ${wipeStatus.includes('✅') ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                {wipeStatus}
+        {activeTab === 'ip' && (
+          filteredIpBans.length === 0
+            ? <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-8 text-center"><CheckCircle2 size={32} className="text-green-500 mx-auto mb-2"/><p className="text-gray-500">No banned IPs</p></div>
+            : filteredIpBans.map(ban => (
+              <div key={ban.id} className="bg-[var(--card-bg)] border border-orange-500/20 rounded-2xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Globe size={18} className="text-orange-500"/>
+                  <div>
+                    <p className="font-bold font-mono text-sm">{ban.ip_address}</p>
+                    <p className="text-xs text-gray-500">{ban.reason} · {new Date(ban.created_at).toLocaleDateString()}</p>
+                  </div>
+                </div>
+                <button onClick={async () => { await supabase.from('ip_bans').delete().eq('id', ban.id); fetchData(); }}
+                  className="px-3 py-1.5 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-xl text-xs font-bold">
+                  Remove
+                </button>
               </div>
-            )}
-          </div>
-        </div>
-      )}
+            ))
+        )}
 
-      {/* IP BLACKLIST TAB */}
-      {activeTab === 'ip' && (
-        <div className="space-y-6">
-          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl p-8 shadow-xl">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Globe className="text-red-500"/> Block an IP Address</h2>
-            <form onSubmit={handleAddIpBan} className="flex gap-4">
-              <input type="text" required value={newIp} onChange={e => setNewIp(e.target.value)} placeholder="192.168.1.1" className="w-48 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:border-red-500" />
-              <input type="text" required value={ipReason} onChange={e => setIpReason(e.target.value)} placeholder="Reason (e.g., API Scraper / DDoS)" className="flex-1 bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-4 py-3 focus:outline-none focus:border-red-500" />
-              <button type="submit" className="bg-red-500 hover:bg-red-600 text-white font-bold px-6 rounded-xl shadow-lg shadow-red-500/20 transition-colors">Block IP</button>
-            </form>
-          </div>
-
-          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-xl">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[var(--background)]/50 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="p-5 font-semibold">IP Address</th>
-                  <th className="p-5 font-semibold">Reason</th>
-                  <th className="p-5 font-semibold">Date Blocked</th>
-                  <th className="p-5 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--card-border)]">
-                {bans.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-500">No IPs are currently blacklisted.</td></tr>
-                ) : (
-                  bans.map(ban => (
-                    <tr key={ban.id} className="hover:bg-[var(--background)]/30 transition-colors">
-                      <td className="p-5 font-mono font-bold text-red-500">{ban.ip_address}</td>
-                      <td className="p-5 text-sm text-gray-600 dark:text-gray-300">{ban.reason}</td>
-                      <td className="p-5 text-sm text-gray-500">{new Date(ban.created_at).toLocaleString()}</td>
-                      <td className="p-5 text-right">
-                        <button onClick={() => removeIpBan(ban.id)} className="px-4 py-1.5 bg-green-500/10 text-green-600 hover:bg-green-500 hover:text-white rounded-lg text-xs font-bold transition-colors">Unblock</button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
+        {activeTab === 'sessions' && (
+          filteredSessions.length === 0
+            ? <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-8 text-center"><AlertTriangle size={32} className="text-gray-300 mx-auto mb-2"/><p className="text-gray-500">No active sessions</p></div>
+            : filteredSessions.map(s => (
+              <div key={s.id} className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Smartphone size={18} className="text-blue-500"/>
+                  <div>
+                    <p className="font-bold text-sm">{s.user_email}</p>
+                    <p className="text-xs text-gray-500 font-mono">{s.ip_address} · {s.device_hash?.substring(0, 16)}...</p>
+                    <p className="text-xs text-gray-400">Last active: {new Date(s.last_heartbeat || s.created_at).toLocaleString()}</p>
+                  </div>
+                </div>
+                <button onClick={() => killSession(s.id, s.user_email)}
+                  className="px-3 py-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl text-xs font-bold">
+                  Kill Session
+                </button>
+              </div>
+            ))
+        )}
+      </div>
     </div>
   );
 }
-
