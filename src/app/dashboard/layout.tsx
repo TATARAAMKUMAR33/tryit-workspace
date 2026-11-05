@@ -204,7 +204,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
-              <button key={item.name} onClick={() => router.push(item.href)}
+              <button key={item.href || index} onClick={() => router.push(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${isActive ? `${item.bg} ${item.color} font-bold shadow-sm border border-white/50` : 'text-gray-600 hover:bg-white/60 hover:shadow-sm'}`}>
                 <div className={`p-1.5 rounded-lg transition-transform group-hover:scale-110 ${isActive ? 'bg-white/50' : 'bg-transparent'}`}>
                   <item.icon size={18} className={isActive ? item.color : 'text-gray-400 group-hover:text-gray-700'} />
