@@ -60,6 +60,12 @@ export default function LoginPortal() {
     // Step 4: Store session
     localStorage.setItem('tryit_user', email);
     localStorage.setItem('tryit_role', roleData.role);
+    // Log login session
+    await supabase.from('staff_sessions').insert([{
+    user_email: email,
+    event_type: 'login',
+    timestamp: new Date().toISOString()
+   }]);
 
     setMessage(`Access Granted! Welcome ${roleData.role.replace('_', ' ').toUpperCase()}`);
     setTimeout(() => router.push('/dashboard'), 800);

@@ -6,7 +6,8 @@ import {
   UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare, 
   BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel, 
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns, Target,
-  Camera, X
+  Camera, X,
+  Calendar
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlobalSearch from '@/components/GlobalSearch';
@@ -56,6 +57,7 @@ const navItems = [
   { name: 'System Logs', href: '/dashboard/system', icon: Terminal, color: 'text-gray-500', bg: 'bg-gray-500/10' },
   { name: 'Staff KPI', href: '/dashboard/performance', icon: BarChart2, color: 'text-cyan-600', bg: 'bg-cyan-600/10' },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-600/10' },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-500/10' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
