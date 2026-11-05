@@ -110,7 +110,7 @@ export default function MasterControl() {
       if (general) await supabase.from('chat_channel_members').upsert([{ channel_id: general.id, user_email: newEmail }], { onConflict: 'channel_id,user_email' });
     }
 
-    await supabase.from('leave_balances').insert([{ user_email: newEmail }]).onConflict('user_email', { ignoreDuplicates: true });
+    await supabase.from('leave_balances').upsert([{ user_email: newEmail }], { onConflict: 'user_email', ignoreDuplicates: true });
     await supabase.from('audit_logs').insert([{ user_email: user, action: 'STAFF_CREATED', details: { target: newEmail, role: newRole, team: newTeam } }]);
 
     setMessage(`✅ ${newEmail} added as ${newRole}. Send them a login link.`);

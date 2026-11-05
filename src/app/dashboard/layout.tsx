@@ -6,8 +6,7 @@ import {
   UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare, 
   BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel, 
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns, Target,
-  Camera, X,
-  Calendar
+  Camera, X,Calendar,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlobalSearch from '@/components/GlobalSearch';
