@@ -6,12 +6,15 @@ import {
   UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare, 
   BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel, 
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns, Target,
-  Camera, X,Calendar,
-  CalendarDays, UserCircle2} from 'lucide-react';
+  Camera, X,CalendarDays,
+} from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlobalSearch from '@/components/GlobalSearch';
 import EscalationAlerts from '@/components/EscalationAlerts';
-import PushNotificationButton from '@/components/PushNotificationButton';
+import PushNotificationButton from '@/components/<NotificationBell />';
+import NotificationBell from '@/components/NotificationBell';
+import QuickActions from '@/components/QuickActions';
+
 
 const rolePermissions: Record<string, string[]> = {
   super_admin: ['*'],
@@ -56,9 +59,8 @@ const navItems = [
   { name: 'System Logs', href: '/dashboard/system', icon: Terminal, color: 'text-gray-500', bg: 'bg-gray-500/10' },
   { name: 'Staff KPI', href: '/dashboard/performance', icon: BarChart2, color: 'text-cyan-600', bg: 'bg-cyan-600/10' },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-600/10' },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { name: 'My Profile', href: '/dashboard/profile', icon: UserCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
   { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+  { name: 'Question Bank', href: '/dashboard/questions', icon: Database, color: 'text-purple-500', bg: 'bg-purple-500/10' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -156,6 +158,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen w-screen bg-[var(--background)] overflow-hidden">
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+        
 
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -204,7 +207,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {filteredNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (
-              <button key={item.href || index} onClick={() => router.push(item.href)}
+              <button key={item.href} onClick={() => router.push(item.href)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${isActive ? `${item.bg} ${item.color} font-bold shadow-sm border border-white/50` : 'text-gray-600 hover:bg-white/60 hover:shadow-sm'}`}>
                 <div className={`p-1.5 rounded-lg transition-transform group-hover:scale-110 ${isActive ? 'bg-white/50' : 'bg-transparent'}`}>
                   <item.icon size={18} className={isActive ? item.color : 'text-gray-400 group-hover:text-gray-700'} />
