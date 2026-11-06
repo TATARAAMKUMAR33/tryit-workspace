@@ -1,7 +1,7 @@
 ﻿import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  output: 'export', // Required for Cloudflare Pages static hosting
+  output: 'export', // <--- Add this
   devIndicators: false,
 };
 
