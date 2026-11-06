@@ -1,30 +1,60 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { 
-  LayoutDashboard, Ticket, CheckSquare, Users, LogOut, Zap, Menu, Search, 
-  UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare, 
-  BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel, 
-  BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns, Target,
-  Camera, X,CalendarDays,
+import {
+  LayoutDashboard, Ticket, CheckSquare, Users, LogOut, Zap, Menu, Search,
+  UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare,
+  BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel,
+  BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns,
+  Target, Camera, X, CalendarDays, Database
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import GlobalSearch from '@/components/GlobalSearch';
 import EscalationAlerts from '@/components/EscalationAlerts';
-import PushNotificationButton from '@/components/<NotificationBell />';
 import NotificationBell from '@/components/NotificationBell';
 import QuickActions from '@/components/QuickActions';
 
-
 const rolePermissions: Record<string, string[]> = {
   super_admin: ['*'],
-  qa_agent: ['/dashboard', '/dashboard/qa', '/dashboard/chat', '/dashboard/knowledge'],
-  crm_agent: ['/dashboard', '/dashboard/tickets', '/dashboard/students', '/dashboard/chat', '/dashboard/knowledge', '/dashboard/disputes'],
-  discipline_officer: ['/dashboard', '/dashboard/moderation', '/dashboard/risk', '/dashboard/chat'],
-  hr: ['/dashboard', '/dashboard/staff', '/dashboard/team', '/dashboard/hr', '/dashboard/chat', '/dashboard/knowledge', '/dashboard/performance', '/dashboard/verification', '/dashboard/expenses'],
-  finance: ['/dashboard', '/dashboard/billing', '/dashboard/expenses', '/dashboard/disputes', '/dashboard/hr'],
-  content_lead: ['/dashboard', '/dashboard/qa', '/dashboard/content-ops', '/dashboard/knowledge', '/dashboard/chat', '/dashboard/moderation'],
-  mentor: ['/dashboard', '/dashboard/qa', '/dashboard/chat', '/dashboard/knowledge']
+  qa_agent: [
+    '/dashboard', '/dashboard/qa', '/dashboard/chat',
+    '/dashboard/knowledge', '/dashboard/feed', '/dashboard/pulse',
+    '/dashboard/profile', '/dashboard/calendar', '/dashboard/content-ops',
+    '/dashboard/questions'
+  ],
+  crm_agent: [
+    '/dashboard', '/dashboard/tickets', '/dashboard/students',
+    '/dashboard/chat', '/dashboard/knowledge', '/dashboard/disputes',
+    '/dashboard/feed', '/dashboard/leads', '/dashboard/pulse',
+    '/dashboard/profile', '/dashboard/calendar', '/dashboard/verification'
+  ],
+  discipline_officer: [
+    '/dashboard', '/dashboard/moderation', '/dashboard/risk',
+    '/dashboard/chat', '/dashboard/security', '/dashboard/feed',
+    '/dashboard/pulse', '/dashboard/profile', '/dashboard/calendar'
+  ],
+  hr: [
+    '/dashboard', '/dashboard/staff', '/dashboard/team',
+    '/dashboard/hr', '/dashboard/chat', '/dashboard/knowledge',
+    '/dashboard/performance', '/dashboard/verification', '/dashboard/expenses',
+    '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
+    '/dashboard/calendar', '/dashboard/sprints'
+  ],
+  finance: [
+    '/dashboard', '/dashboard/billing', '/dashboard/expenses',
+    '/dashboard/disputes', '/dashboard/hr', '/dashboard/feed',
+    '/dashboard/profile', '/dashboard/calendar', '/dashboard/analytics'
+  ],
+  content_lead: [
+    '/dashboard', '/dashboard/qa', '/dashboard/content-ops',
+    '/dashboard/knowledge', '/dashboard/chat', '/dashboard/moderation',
+    '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
+    '/dashboard/calendar', '/dashboard/questions'
+  ],
+  mentor: [
+    '/dashboard', '/dashboard/qa', '/dashboard/chat',
+    '/dashboard/knowledge', '/dashboard/profile', '/dashboard/feed'
+  ]
 };
 
 const navItems = [
@@ -51,7 +81,7 @@ const navItems = [
   { name: 'Moderation', href: '/dashboard/moderation', icon: Flag, color: 'text-amber-500', bg: 'bg-amber-500/10' },
   { name: 'Risk Radar', href: '/dashboard/risk', icon: AlertTriangle, color: 'text-orange-600', bg: 'bg-orange-600/10' },
   { name: 'Security', href: '/dashboard/security', icon: ShieldX, color: 'text-emerald-600', bg: 'bg-emerald-600/10' },
-  { name: 'HR & Payroll', href: '/dashboard/hr', icon: Briefcase, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+  { name: 'HR & Attendance', href: '/dashboard/hr', icon: Briefcase, color: 'text-violet-500', bg: 'bg-violet-500/10' },
   { name: 'Expenses', href: '/dashboard/expenses', icon: Wallet, color: 'text-amber-600', bg: 'bg-amber-600/10' },
   { name: 'Billing', href: '/dashboard/billing', icon: CreditCard, color: 'text-green-600', bg: 'bg-green-600/10' },
   { name: 'Error Logs', href: '/dashboard/errors', icon: Bug, color: 'text-red-500', bg: 'bg-red-500/10' },
@@ -61,6 +91,7 @@ const navItems = [
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-600/10' },
   { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
   { name: 'Question Bank', href: '/dashboard/questions', icon: Database, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+  { name: 'My Profile', href: '/dashboard/profile', icon: UserCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -90,22 +121,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setEmail(storedEmail);
     setMounted(true);
 
-    supabase
-      .from('staff_roles')
-      .select('avatar_url, bio')
-      .eq('user_email', storedEmail)
-      .single()
+    // Load profile
+    supabase.from('staff_roles').select('avatar_url, bio')
+      .eq('user_email', storedEmail).single()
       .then(({ data }) => {
-        if (data) {
-          setAvatarUrl(data.avatar_url);
-          setBio(data.bio || '');
-        }
+        if (data) { setAvatarUrl(data.avatar_url); setBio(data.bio || ''); }
       });
 
+    // Heartbeat — mark staff as online every 30 seconds
+    const sendHeartbeat = async () => {
+      await supabase.from('staff_roles').update({
+        last_heartbeat: new Date().toISOString(),
+        is_online: true
+      }).eq('user_email', storedEmail);
+    };
+    sendHeartbeat();
+    const heartbeat = setInterval(sendHeartbeat, 30000);
+
+    // Check permissions
     const permissions = rolePermissions[storedRole] || [];
     if (permissions[0] !== '*' && !permissions.includes(pathname)) {
       router.push('/dashboard');
     }
+
+    return () => clearInterval(heartbeat);
   }, [pathname, router]);
 
   useEffect(() => {
@@ -120,6 +159,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, []);
 
   const handleLogout = async () => {
+    const storedEmail = localStorage.getItem('tryit_user');
+    if (storedEmail) {
+      await supabase.from('staff_roles').update({ is_online: false }).eq('user_email', storedEmail);
+      await supabase.from('staff_sessions').insert([{ user_email: storedEmail, event_type: 'logout' }]);
+    }
     await supabase.auth.signOut();
     localStorage.clear();
     router.push('/login');
@@ -158,7 +202,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen w-screen bg-[var(--background)] overflow-hidden">
       <GlobalSearch isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
-        
 
       {isProfileModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -180,9 +223,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-gray-500 uppercase">Bio</label>
-                <textarea value={bio} onChange={e => setBio(e.target.value)} placeholder="Write something about yourself..." className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500 mt-1" />
+                <textarea value={bio} onChange={e => setBio(e.target.value)}
+                  placeholder="Write something about yourself..."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:border-blue-500 mt-1" />
               </div>
-              <button onClick={() => { supabase.from('staff_roles').update({ bio }).eq('user_email', email).then(() => { alert('Bio saved!'); setIsProfileModalOpen(false); }); }} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors">
+              <button
+                onClick={() => {
+                  supabase.from('staff_roles').update({ bio }).eq('user_email', email)
+                    .then(() => { alert('Bio saved!'); setIsProfileModalOpen(false); });
+                }}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition-colors">
                 Save Profile
               </button>
             </div>
@@ -198,7 +248,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <span className="font-bold text-xl tracking-tight text-[var(--foreground)]">TryIT Hub</span>
           </div>
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 rounded-lg hover:bg-white/50 text-gray-500 transition-colors">
+          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-lg hover:bg-white/50 text-gray-500 transition-colors">
             <Menu size={20} />
           </button>
         </div>
@@ -208,7 +259,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const isActive = pathname === item.href;
             return (
               <button key={item.href} onClick={() => router.push(item.href)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${isActive ? `${item.bg} ${item.color} font-bold shadow-sm border border-white/50` : 'text-gray-600 hover:bg-white/60 hover:shadow-sm'}`}>
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group ${
+                  isActive
+                    ? `${item.bg} ${item.color} font-bold shadow-sm border border-white/50`
+                    : 'text-gray-600 hover:bg-white/60 hover:shadow-sm'
+                }`}>
                 <div className={`p-1.5 rounded-lg transition-transform group-hover:scale-110 ${isActive ? 'bg-white/50' : 'bg-transparent'}`}>
                   <item.icon size={18} className={isActive ? item.color : 'text-gray-400 group-hover:text-gray-700'} />
                 </div>
@@ -219,7 +274,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         <div className="p-3 border-t border-[var(--card-border)] bg-white/30 backdrop-blur-sm shrink-0">
-          <div onClick={() => setIsProfileModalOpen(true)} className={`flex items-center gap-3 p-2 mb-2 rounded-xl hover:bg-white transition-colors cursor-pointer ${!isSidebarOpen && 'justify-center'}`}>
+          <div onClick={() => setIsProfileModalOpen(true)}
+            className={`flex items-center gap-3 p-2 mb-2 rounded-xl hover:bg-white transition-colors cursor-pointer ${!isSidebarOpen && 'justify-center'}`}>
             <div className="w-9 h-9 rounded-full bg-gradient-to-r from-pink-500 to-orange-400 flex items-center justify-center text-white font-bold shadow-md overflow-hidden">
               {avatarUrl ? <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" /> : email[0]?.toUpperCase()}
             </div>
@@ -228,7 +284,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className="text-xs text-gray-500">🚀 {role.replace('_', ' ')}</p>
             </div>
           </div>
-          <button onClick={handleLogout} className={`w-full flex items-center gap-4 px-3 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors ${!isSidebarOpen && 'justify-center'}`}>
+          <button onClick={handleLogout}
+            className={`w-full flex items-center gap-4 px-3 py-2 text-red-500 hover:bg-red-50 rounded-xl transition-colors ${!isSidebarOpen && 'justify-center'}`}>
             <LogOut size={20} />
             <span className={`whitespace-nowrap font-medium text-sm ${isSidebarOpen ? 'opacity-100' : 'opacity-0 hidden'}`}>Logout</span>
           </button>
@@ -245,7 +302,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               Search anything...
               <kbd className="absolute right-3 top-2 px-1.5 py-0.5 text-[10px] font-mono bg-gray-100 rounded border border-gray-200">Ctrl K</kbd>
             </button>
-            <PushNotificationButton />
+            <NotificationBell />
             <EscalationAlerts />
             <div className="bg-purple-100 text-purple-700 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border border-purple-200 shadow-sm">
               {role.replace('_', ' ')}
@@ -256,6 +313,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+
+      <QuickActions />
     </div>
   );
 }
