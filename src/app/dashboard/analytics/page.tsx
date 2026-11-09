@@ -35,7 +35,7 @@ export default function AnalyticsDashboard() {
     ] = await Promise.all([
       supabase.from('invoices').select('amount, status, created_at'),
       supabase.from('mentor_wallets').select('total_paid, mentor_email'),
-      supabase.from('questions').select('created_at, subject, verified'),
+      supabase.from('question_bank_stats').select('created_at, subject_name, verified'),
       supabase.from('exam_submissions').select('student_email, exam_name, submitted_at'),
       supabase.from('doubts').select('id, created_at'),
       supabase.from('bharat_pulse').select('id'),
@@ -94,12 +94,10 @@ export default function AnalyticsDashboard() {
 
     // Questions by subject
     const subjectCounts: Record<string, number> = {};
-    questions.forEach(q => { if (q.subject) subjectCounts[q.subject] = (subjectCounts[q.subject] || 0) + 1; });
-    const subjectData = Object.entries(subjectCounts)
-      .sort((a, b) => b[1] - a[1]).slice(0, 8)
-      .map(([name, count]) => ({ name: name.substring(0, 12), count }));
-    setQuestionsBySubject(subjectData);
-
+    questions.forEach(q => { 
+  const subKey = q.subject_name || q.subject_id || 'Unknown';
+  subjectCounts[subKey] = (subjectCounts[subKey] || 0) + 1; 
+      });
     // Weekly signups
     const weeks: Record<string, number> = {};
     profiles.forEach(p => {

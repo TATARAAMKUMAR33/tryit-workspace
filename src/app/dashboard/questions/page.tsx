@@ -37,11 +37,10 @@ export default function QuestionBankViewer() {
       supabase.from('questions').select('id', { count: 'exact', head: true }).gte('created_at', new Date(Date.now() - 7 * 86400000).toISOString()),
       supabase.from('submitted_questions').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
     ]);
-
-    if (subStats.data) {
-      setSubjectStats(subStats.data);
-      setSubjects(subStats.data.map((s: any) => s.subject_name).filter(Boolean));
-    }
+  if (subStats.data) {
+  setSubjectStats(subStats.data);
+  setSubjects(subStats.data.map((s: any) => s.subject_name).filter(Boolean));
+}
     if (dayStats.data) setDailyStats(dayStats.data.reverse());
 
     setTotals({
@@ -60,7 +59,7 @@ export default function QuestionBankViewer() {
   const fetchQuestions = async () => {
     let query = supabase.from('questions').select('id, subject, level, verified, generated_by, created_at, quality_score, language_code, syllabus_version').order('created_at', { ascending: false });
 
-    if (filterSubject !== 'all') query = query.eq('subject', filterSubject);
+    if (filterSubject !== 'all') query = query.eq('subject_id', filterSubject);
     if (filterStatus === 'verified') query = query.eq('verified', true);
     if (filterStatus === 'pending') query = query.eq('verified', false);
     if (filterDate === 'today') query = query.gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString());
@@ -222,7 +221,7 @@ export default function QuestionBankViewer() {
               {filtered.map(q => (
                 <tr key={q.id} className="border-b border-[var(--card-border)] hover:bg-[var(--background)] transition-colors">
                   <td className="px-3 py-2 font-mono text-xs text-gray-400">{q.id.substring(0, 8)}...</td>
-                  <td className="px-3 py-2 font-medium">{q.subject || '—'}</td>
+                  <td className="px-3 py-2 font-medium">{q.subject_name || q.subject_id || '—'}</td>
                   <td className="px-3 py-2">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                       q.level <= 3 ? 'bg-green-500/10 text-green-600' :

@@ -112,7 +112,7 @@ export default function QAInspector() {
 
   const filtered = questions.filter(q =>
     !search ||
-    q.subject?.toLowerCase().includes(search.toLowerCase()) ||
+    q.subject_name?.toLowerCase().includes(search.toLowerCase()) ||
     q.question_text?.toLowerCase().includes(search.toLowerCase()) ||
     q.id?.toLowerCase().includes(search.toLowerCase())
   );
@@ -262,11 +262,11 @@ export default function QAInspector() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      {q.subject && (
-                        <span className="text-xs font-bold bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded">
-                          {q.subject}
-                        </span>
-                      )}
+                      {(q.subject_name || q.subject_id) && (
+              <span className="text-xs font-bold bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded">
+               {q.subject_name || q.subject_id}
+               </span>
+               )}
                       <span className={`text-xs font-bold px-2 py-0.5 rounded ${level.color}`}>
                         {level.label}
                       </span>
