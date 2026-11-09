@@ -6,7 +6,8 @@ import {
   UserPlus, Activity, Sparkles, ShieldAlert, UserCircle, MessageSquare,
   BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel,
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns,
-  Target, Camera, X, CalendarDays, Database
+  Target, Camera, X, CalendarDays, Database,Star,
+  ClipboardList
 } from 'lucide-react';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { supabase } from '@/lib/supabase';
@@ -39,7 +40,8 @@ const rolePermissions: Record<string, string[]> = {
     '/dashboard/hr', '/dashboard/chat', '/dashboard/knowledge',
     '/dashboard/performance', '/dashboard/verification', '/dashboard/expenses',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
-    '/dashboard/calendar', '/dashboard/sprints','/dashboard/mentors'
+    '/dashboard/calendar', '/dashboard/sprints','/dashboard/mentors',
+    '/dashboard/runbook', '/dashboard/decisions'
   ],
   finance: [
     '/dashboard', '/dashboard/billing', '/dashboard/expenses',
@@ -50,7 +52,7 @@ const rolePermissions: Record<string, string[]> = {
     '/dashboard', '/dashboard/qa', '/dashboard/content-ops',
     '/dashboard/knowledge', '/dashboard/chat', '/dashboard/moderation',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
-    '/dashboard/calendar', '/dashboard/questions','/dashboard/mentors'
+    '/dashboard/calendar', '/dashboard/questions','/dashboard/mentors','/dashboard/decisions'
   ],
   mentor: [
     '/dashboard', '/dashboard/qa', '/dashboard/chat',
@@ -93,6 +95,8 @@ const navItems = [
   { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
   { name: 'Question Bank', href: '/dashboard/questions', icon: Database, color: 'text-purple-500', bg: 'bg-purple-500/10' },
   { name: 'Mentor Hub', href: '/dashboard/mentors', icon: Star, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
+  { name: 'Decisions Log', href: '/dashboard/decisions', icon: BookOpen, color: 'text-blue-600', bg: 'bg-blue-600/10' },
+  { name: 'Runbook', href: '/dashboard/runbook', icon: ClipboardList, color: 'text-teal-500', bg: 'bg-teal-500/10' },
   { name: 'My Profile', href: '/dashboard/profile', icon: UserCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
 ];
 

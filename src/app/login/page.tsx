@@ -60,6 +60,17 @@ export default function LoginPortal() {
     // Step 4: Store session
     localStorage.setItem('tryit_user', email);
     localStorage.setItem('tryit_role', roleData.role);
+    // After localStorage.setItem lines, add:
+await supabase.from('staff_sessions').insert([{
+  user_email: email,
+  event_type: 'login',
+  timestamp: new Date().toISOString()
+}]);
+await supabase.from('staff_roles').update({
+  is_online: true,
+  last_heartbeat: new Date().toISOString()
+}).eq('user_email', email);
+
     // Log login session
     await supabase.from('staff_sessions').insert([{
     user_email: email,

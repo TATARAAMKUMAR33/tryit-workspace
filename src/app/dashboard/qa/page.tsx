@@ -1,345 +1,376 @@
 ﻿'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { 
-  CheckCircle2, XCircle, RefreshCw, BookOpen, AlertTriangle, 
-  Lightbulb, Search, ChevronLeft, ChevronRight, Calendar, 
-  MessageSquare, ListFilter, PlayCircle, Download, CheckSquare
+import {
+  CheckSquare, RefreshCw, CheckCircle2, XCircle,
+  Search, Filter, ChevronDown, ChevronUp,
+  AlertTriangle, Eye, Download, Zap
 } from 'lucide-react';
 import { exportToCSV } from '@/lib/exportCsv';
 
-export default function QAWorkspace() {
-  const [activeTab, setActiveTab] = useState<'review' | 'list'>('list'); // Default to list for bulk actions
-  const [stats, setStats] = useState({ total: 0, pending: 0, approved: 0, rejected: 0 });
-
-  // Single Review State
-  const [question, setQuestion] = useState<any>(null);
+export default function QAInspector() {
+  const [questions, setQuestions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rejecting, setRejecting] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
-  const [rejectCategory, setRejectCategory] = useState('math_error');
-  const [userEmail, setUserEmail] = useState('tatu.ind@hotmail.com');
-
-  // List State
-  const [list, setList] = useState<any[]>([]);
-  const [listLoading, setListLoading] = useState(false);
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('tryit_v3');
-  
-  // Bulk Action State
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkLoading, setBulkLoading] = useState(false);
+  const [filterSubject, setFilterSubject] = useState('all');
+  const [filterLevel, setFilterLevel] = useState('all');
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [stats, setStats] = useState({ total: 0, myApproved: 0, myRejected: 0 });
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const user = typeof window !== 'undefined' ? localStorage.getItem('tryit_user') || '' : '';
 
-  const fetchStats = async () => {
-    const { count: total } = await supabase.from('questions').select('*', { count: 'exact', head: true });
-    const { count: pending } = await supabase.from('questions').select('*', { count: 'exact', head: true }).eq('generated_by', 'tryit_v3');
-    const { count: approved } = await supabase.from('questions').select('*', { count: 'exact', head: true }).eq('generated_by', 'tryit_v3_approved');
-    const { count: rejected } = await supabase.from('questions').select('*', { count: 'exact', head: true }).eq('generated_by', 'tryit_v3_rejected');
-    setStats({ total: total || 0, pending: pending || 0, approved: approved || 0, rejected: rejected || 0 });
-  };
-
-  const fetchSingleQuestion = useCallback(async () => {
+  const fetchQuestions = async () => {
     setLoading(true);
-    setRejecting(false);
-    const { data } = await supabase.from('questions').select('*').eq('generated_by', 'tryit_v3').limit(1).maybeSingle();
-    setQuestion(data || null);
+    let q = supabase.from('questions').select('*')
+      .eq('verified', false)
+      .order('created_at', { ascending: true })
+      .limit(100);
+
+    if (filterSubject !== 'all') q = q.eq('subject', filterSubject);
+    if (filterLevel !== 'all') q = q.eq('level', Number(filterLevel));
+
+    const [{ data }, subData, myStats] = await Promise.all([
+      q,
+      supabase.from('questions').select('subject').eq('verified', false),
+      supabase.from('qa_votes').select('id, vote')
+        .eq('voter_email', user)
+        .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()),
+    ]);
+
+    if (data) setQuestions(data);
+
+    if (subData.data) {
+      const unique = [...new Set(subData.data.map(s => s.subject).filter(Boolean))];
+      setSubjects(unique as string[]);
+    }
+
+    if (myStats.data) {
+      setStats({
+        total: data?.length || 0,
+        myApproved: myStats.data.filter(v => v.vote === 'approve').length,
+        myRejected: myStats.data.filter(v => v.vote === 'reject').length,
+      });
+    }
     setLoading(false);
-  }, []);
-
-  const fetchList = useCallback(async () => {
-    setListLoading(true);
-    let query = supabase.from('questions').select('*', { count: 'exact' }).eq('generated_by', statusFilter);
-    
-    if (search) {
-      query = query.or(`question_en.ilike.%${search}%,id.ilike.%${search}%`);
-    }
-    
-    const { data, count } = await query
-      .order('created_at', { ascending: false })
-      .range(page * 20, (page + 1) * 20 - 1);
-
-    if (data) setList(data);
-    if (count) setTotalPages(Math.ceil(count / 20));
-    setListLoading(false);
-    setSelectedIds([]); // Clear selection on page change
-  }, [page, search, statusFilter]);
-
-  useEffect(() => {
-    setUserEmail(localStorage.getItem('tryit_user') || 'tatu.ind@hotmail.com');
-    fetchStats();
-    if (activeTab === 'review') fetchSingleQuestion();
-    else fetchList();
-  }, [activeTab, fetchSingleQuestion, fetchList]);
-
-  // --- SINGLE ACTIONS ---
-  const handleAction = async (action: 'approve' | 'reject') => {
-    if (!question) return;
-    if (action === 'reject' && !rejectReason) {
-      alert('Please add a comment for the rejection reason.');
-      return;
-    }
-
-    setLoading(true);
-    const newStatus = action === 'approve' ? 'tryit_v3_approved' : 'tryit_v3_rejected';
-    const updateData: any = { generated_by: newStatus, reviewed_by: userEmail };
-    if (action === 'reject') updateData.review_notes = `[${rejectCategory.toUpperCase()}] ${rejectReason}`;
-
-    const { error } = await supabase.from('questions').update(updateData).eq('id', question.id);
-
-    if (!error) {
-      setRejecting(false); setRejectReason('');
-      fetchStats(); fetchSingleQuestion();
-    } else {
-      alert("Error saving: " + error.message);
-      setLoading(false);
-    }
   };
 
-  // --- BULK ACTIONS ---
-  const toggleSelection = (id: string) => {
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+  useEffect(() => { fetchQuestions(); }, [filterSubject, filterLevel]);
+
+  const approve = async (id: string) => {
+    await supabase.from('questions').update({ verified: true, verified_by: user, verified_at: new Date().toISOString() }).eq('id', id);
+    await supabase.from('qa_votes').insert([{ question_id: id, voter_email: user, vote: 'approve' }]);
+    await supabase.from('staff_sessions').insert([{ user_email: user, event_type: 'qa_approve', notes: id }]);
+    setQuestions(prev => prev.filter(q => q.id !== id));
+    setSelected(prev => prev.filter(s => s !== id));
+    setStats(prev => ({ ...prev, myApproved: prev.myApproved + 1, total: prev.total - 1 }));
   };
 
-  const toggleAll = () => {
-    if (selectedIds.length === list.length) setSelectedIds([]);
-    else setSelectedIds(list.map(q => q.id));
+  const reject = async (id: string, reason: string) => {
+    await supabase.from('questions').update({
+      verified: false,
+      reject_reason: reason,
+      rejected_by: user,
+      rejected_at: new Date().toISOString()
+    }).eq('id', id);
+    await supabase.from('qa_votes').insert([{ question_id: id, voter_email: user, vote: 'reject', reason }]);
+    setQuestions(prev => prev.filter(q => q.id !== id));
+    setSelected(prev => prev.filter(s => s !== id));
+    setRejectingId(null);
+    setRejectReason('');
+    setStats(prev => ({ ...prev, myRejected: prev.myRejected + 1, total: prev.total - 1 }));
   };
 
-  const handleBulkApprove = async () => {
-    if (selectedIds.length === 0) return;
-    setBulkLoading(true);
-    
-    await supabase.from('questions').update({ 
-      generated_by: 'tryit_v3_approved', 
-      reviewed_by: userEmail 
-    }).in('id', selectedIds);
-
-    await supabase.from('audit_logs').insert([{ user_email: userEmail, action: 'BULK_APPROVE_QA', details: { count: selectedIds.length } }]);
-    
-    setBulkLoading(false);
-    setSelectedIds([]);
-    fetchList();
-    fetchStats();
+  const bulkApprove = async () => {
+    if (selected.length === 0) return;
+    setBulkProcessing(true);
+    for (const id of selected) await approve(id);
+    setSelected([]);
+    setBulkProcessing(false);
   };
 
-  const handleBulkReject = async () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Are you sure you want to bulk reject ${selectedIds.length} questions?`)) return;
-    setBulkLoading(true);
-    
-    await supabase.from('questions').update({ 
-      generated_by: 'tryit_v3_rejected', 
-      reviewed_by: userEmail 
-    }).in('id', selectedIds);
-
-    await supabase.from('audit_logs').insert([{ user_email: userEmail, action: 'BULK_REJECT_QA', details: { count: selectedIds.length } }]);
-    
-    setBulkLoading(false);
-    setSelectedIds([]);
-    fetchList();
-    fetchStats();
+  const bulkReject = async () => {
+    if (selected.length === 0) return;
+    const reason = prompt('Rejection reason for all selected questions:');
+    if (!reason) return;
+    setBulkProcessing(true);
+    for (const id of selected) await reject(id, reason);
+    setSelected([]);
+    setBulkProcessing(false);
   };
 
-  const renderQuestionDetails = (q: any) => {
-    const exp = q.explanation || {};
-    const dateStr = new Date(q.created_at).toLocaleString();
-    const examIntel = exp.cross_exam_intelligence || q.topic_id?.replace(/_/g, ' ').toUpperCase() || 'Not specified';
-
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3 mb-6">
-          <span className="bg-slate-500/10 text-slate-500 px-3 py-1 rounded-lg text-xs font-bold tracking-wider uppercase">{q.subject_id?.replace(/_/g, ' ') || 'General'}</span>
-          <span className={`px-3 py-1 rounded-lg text-xs font-bold tracking-wider uppercase ${q.level >= 7 ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>Level {q.level}</span>
-          <span className="flex items-center gap-1 text-xs font-medium text-gray-500 ml-auto"><Calendar size={14} /> {dateStr}</span>
-        </div>
-        <h2 className="text-xl font-medium leading-relaxed mb-6 text-[var(--foreground)]">{q.question_en}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          {q.options_en?.map((opt: string, i: number) => (
-            <div key={i} className={`p-4 rounded-xl border ${i === q.correct_answer ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400' : 'bg-[var(--background)] border-[var(--card-border)] text-gray-600 dark:text-gray-400'}`}>
-              <span className="font-bold mr-2">{String.fromCharCode(65 + i)}.</span>{opt}
-            </div>
-          ))}
-        </div>
-        <div className="space-y-4 pt-6 border-t border-[var(--card-border)]">
-          <h3 className="text-lg font-bold flex items-center gap-2 mb-4 text-[var(--foreground)]"><BookOpen size={20} className="text-blue-500" /> 7-Layer Explanation</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-5 rounded-2xl bg-blue-500/5 border border-blue-500/10">
-              <h4 className="font-bold text-blue-500 mb-2 flex items-center gap-2"><CheckCircle2 size={16}/> Why Correct</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{exp.why_correct}</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-purple-500/5 border border-purple-500/10">
-              <h4 className="font-bold text-purple-500 mb-2 flex items-center gap-2"><Lightbulb size={16}/> Story Context</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{exp.story_explanation}</p>
-            </div>
-            <div className="p-5 rounded-2xl bg-orange-500/5 border border-orange-500/10">
-              <h4 className="font-bold text-orange-500 mb-2 flex items-center gap-2"><AlertTriangle size={16}/> Why B, C, D are Wrong</h4>
-              <ul className="text-sm space-y-1 text-gray-600 dark:text-gray-300">
-                <li><strong>B:</strong> {exp.why_wrong_option_b}</li>
-                <li><strong>C:</strong> {exp.why_wrong_option_c}</li>
-                <li><strong>D:</strong> {exp.why_wrong_option_d}</li>
-              </ul>
-            </div>
-            <div className="p-5 rounded-2xl bg-slate-500/5 border border-slate-500/10">
-              <h4 className="font-bold text-slate-500 mb-2 flex items-center gap-2"><RefreshCw size={16}/> Shortcut & Exam Intel</h4>
-              <p className="text-sm text-gray-600 dark:text-gray-300 mb-2"><strong>Shortcut:</strong> {exp.shortcut_tips}</p>
-              <p className="text-sm text-gray-600 dark:text-gray-300"><strong>Exams:</strong> {examIntel}</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+  const toggleSelect = (id: string) => {
+    setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
+
+  const selectAll = () => {
+    setSelected(filtered.map(q => q.id));
+  };
+
+  const filtered = questions.filter(q =>
+    !search ||
+    q.subject?.toLowerCase().includes(search.toLowerCase()) ||
+    q.question_text?.toLowerCase().includes(search.toLowerCase()) ||
+    q.id?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getLevelLabel = (level: number) => {
+    if (level <= 3) return { label: 'Easy', color: 'text-green-500 bg-green-500/10' };
+    if (level <= 6) return { label: 'Medium', color: 'text-yellow-600 bg-yellow-500/10' };
+    return { label: 'Hard', color: 'text-red-500 bg-red-500/10' };
+  };
+
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <RefreshCw className="animate-spin text-purple-500" size={40}/>
+    </div>
+  );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-24">
-      
-      {/* Top Stats & Tabs */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[var(--card-bg)] p-4 rounded-3xl border border-[var(--card-border)] backdrop-blur-xl">
-        <div className="flex bg-[var(--background)] p-1 rounded-xl border border-[var(--card-border)]">
-          <button onClick={() => setActiveTab('list')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'list' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500'}`}><ListFilter size={16} /> Question Bank</button>
-          <button onClick={() => setActiveTab('review')} className={`px-6 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all ${activeTab === 'review' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-500'}`}><PlayCircle size={16} /> Live Review</button>
+    <div className="max-w-6xl mx-auto space-y-6 animate-fade-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-3">
+            <CheckSquare className="text-purple-500" size={32}/> QA Inspector
+          </h1>
+          <p className="text-gray-500">
+            {stats.total} pending · Today: {stats.myApproved} approved · {stats.myRejected} rejected by you
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-4 text-sm font-semibold">
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Total DB: {stats.total}</div>
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-yellow-500"></div> Pending: {stats.pending}</div>
-          <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-green-500"></div> Approved: {stats.approved}</div>
+        <div className="flex gap-3">
+          <button onClick={() => exportToCSV(filtered, 'TryIT_QA_Queue')}
+            className="px-4 py-2 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-sm font-bold flex items-center gap-2">
+            <Download size={16}/> Export
+          </button>
+          <button onClick={fetchQuestions}
+            className="p-2.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-gray-500">
+            <RefreshCw size={18} className={loading ? 'animate-spin' : ''}/>
+          </button>
         </div>
       </div>
 
-      {/* REVIEW TAB */}
-      {activeTab === 'review' && (
-        <>
-          {loading ? (
-            <div className="flex justify-center py-20"><RefreshCw className="animate-spin text-blue-500" size={40} /></div>
-          ) : !question ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center bg-[var(--card-bg)] rounded-3xl border border-[var(--card-border)]">
-              <CheckCircle2 size={64} className="text-green-500 mb-4" />
-              <h2 className="text-2xl font-bold mb-2 text-[var(--foreground)]">All Caught Up!</h2>
-              <p className="text-gray-500">No more pending questions.</p>
-            </div>
-          ) : (
-            <>
-              <div className="bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--card-border)] rounded-3xl p-8 shadow-xl">
-                {renderQuestionDetails(question)}
-              </div>
-              <div className="flex gap-4">
-                <button onClick={() => handleAction('approve')} className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.01]"><CheckCircle2 size={24} /> Approve Question</button>
-                <button onClick={() => setRejecting(true)} className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 transition-transform hover:scale-[1.01]"><XCircle size={24} /> Reject Question</button>
-              </div>
-            </>
-          )}
-        </>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'In Queue', value: stats.total, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+          { label: 'You Approved Today', value: stats.myApproved, color: 'text-green-500', bg: 'bg-green-500/10' },
+          { label: 'You Rejected Today', value: stats.myRejected, color: 'text-red-500', bg: 'bg-red-500/10' },
+        ].map(card => (
+          <div key={card.label} className={`${card.bg} rounded-2xl p-5 text-center`}>
+            <div className={`text-3xl font-black ${card.color}`}>{card.value}</div>
+            <div className="text-xs text-gray-500 font-bold uppercase mt-1">{card.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-2.5 text-gray-400" size={16}/>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by subject, question text, or ID..."
+            className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl py-2 pl-9 pr-4 text-sm focus:outline-none"/>
+        </div>
+        <select value={filterSubject} onChange={e => setFilterSubject(e.target.value)}
+          className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none">
+          <option value="all">All Subjects</option>
+          {subjects.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)}
+          className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none">
+          <option value="all">All Levels</option>
+          {[1,2,3,4,5,6,7,8,9,10].map(l => <option key={l} value={l}>Level {l}</option>)}
+        </select>
+      </div>
+
+      {/* Bulk Actions */}
+      {selected.length > 0 && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4 flex items-center justify-between">
+          <span className="font-bold text-purple-600">{selected.length} question{selected.length > 1 ? 's' : ''} selected</span>
+          <div className="flex gap-3">
+            <button onClick={selectAll} className="px-3 py-1.5 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl text-xs font-bold">
+              Select All ({filtered.length})
+            </button>
+            <button onClick={bulkApprove} disabled={bulkProcessing}
+              className="px-4 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+              <CheckCircle2 size={14}/> {bulkProcessing ? 'Processing...' : `Approve All (${selected.length})`}
+            </button>
+            <button onClick={bulkReject} disabled={bulkProcessing}
+              className="px-4 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs font-bold flex items-center gap-2 disabled:opacity-50">
+              <XCircle size={14}/> Reject All ({selected.length})
+            </button>
+            <button onClick={() => setSelected([])} className="px-3 py-1.5 bg-gray-500/10 text-gray-500 rounded-xl text-xs font-bold">
+              Clear
+            </button>
+          </div>
+        </div>
       )}
 
-      {/* LIST TAB WITH BULK ACTIONS */}
-      {activeTab === 'list' && (
-        <div className="bg-[var(--card-bg)] backdrop-blur-xl border border-[var(--card-border)] rounded-3xl overflow-hidden shadow-xl">
-          <div className="p-4 border-b border-[var(--card-border)] flex flex-wrap gap-4 items-center">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-              <input type="text" placeholder="Search by ID or Text..." value={search} onChange={(e) => { setSearch(e.target.value); setPage(0); }} className="w-full bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 pl-10 pr-4 text-sm focus:outline-none focus:border-blue-500" />
+      {/* Reject Modal */}
+      {rejectingId && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-[var(--background)] border border-[var(--card-border)] rounded-2xl p-6 max-w-md w-full">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <XCircle size={18} className="text-red-500"/> Reject Question
+            </h2>
+            <p className="text-xs text-gray-500 mb-3">Question ID: {rejectingId.substring(0, 16)}...</p>
+            <div className="space-y-2 mb-4">
+              {['Factually incorrect', 'Poor question quality', 'Duplicate question', 'Wrong subject/topic', 'Answer explanation missing', 'Language issues'].map(reason => (
+                <button key={reason} onClick={() => setRejectReason(reason)}
+                  className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-colors ${rejectReason === reason ? 'bg-red-500/10 border border-red-500/30 text-red-600 font-bold' : 'bg-[var(--card-bg)] border border-[var(--card-border)]'}`}>
+                  {reason}
+                </button>
+              ))}
+              <input value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                placeholder="Or type custom reason..."
+                className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-500"/>
             </div>
-            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }} className="bg-[var(--background)] border border-[var(--card-border)] rounded-xl py-2 px-4 text-sm font-medium focus:outline-none focus:border-blue-500">
-              <option value="tryit_v3">V3 Pending</option>
-              <option value="tryit_v3_approved">V3 Approved</option>
-              <option value="tryit_v3_rejected">V3 Rejected</option>
-            </select>
-            <button onClick={() => exportToCSV(list, `Question_Bank_${statusFilter}`)} className="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors"><Download size={16} /> Export</button>
+            <div className="flex gap-3">
+              <button onClick={() => reject(rejectingId, rejectReason)} disabled={!rejectReason.trim()}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-2.5 rounded-xl disabled:opacity-50">
+                Confirm Reject
+              </button>
+              <button onClick={() => { setRejectingId(null); setRejectReason(''); }}
+                className="px-6 bg-gray-500/10 text-gray-500 font-bold rounded-xl">Cancel</button>
+            </div>
           </div>
+        </div>
+      )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[var(--background)]/50 text-gray-500 text-xs uppercase tracking-wider">
-                  <th className="p-4 font-semibold w-12 text-center">
-                    <input type="checkbox" checked={selectedIds.length === list.length && list.length > 0} onChange={toggleAll} className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
-                  </th>
-                  <th className="p-4 font-semibold">ID / Date</th>
-                  <th className="p-4 font-semibold">Question</th>
-                  <th className="p-4 font-semibold">Topic / Level</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--card-border)]">
-                {listLoading ? (
-                  <tr><td colSpan={4} className="p-8 text-center"><RefreshCw className="animate-spin text-blue-500 inline-block" /></td></tr>
-                ) : list.length === 0 ? (
-                  <tr><td colSpan={4} className="p-8 text-center text-gray-500">No questions found.</td></tr>
-                ) : (
-                  list.map((q) => (
-                    <tr key={q.id} className={`transition-colors ${selectedIds.includes(q.id) ? 'bg-blue-500/5' : 'hover:bg-[var(--background)]/30'}`}>
-                      <td className="p-4 text-center">
-                        <input type="checkbox" checked={selectedIds.includes(q.id)} onChange={() => toggleSelection(q.id)} className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer" />
-                      </td>
-                      <td className="p-4 text-sm">
-                        <div className="font-mono text-xs text-blue-500 mb-1">{q.id.slice(0, 10)}</div>
-                        <div className="text-gray-500 text-xs flex items-center gap-1"><Calendar size={12}/> {new Date(q.created_at).toLocaleDateString()}</div>
-                      </td>
-                      <td className="p-4 text-sm font-medium text-[var(--foreground)] line-clamp-2 max-w-md">{q.question_en}</td>
-                      <td className="p-4 text-sm">
-                        <span className="block text-xs text-gray-500 mb-1">{q.topic_id?.replace(/_/g, ' ').slice(0, 30)}...</span>
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${q.level >= 7 ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}`}>L{q.level}</span>
-                      </td>
-                    </tr>
-                  ))
+      {/* Question List */}
+      <div className="space-y-3">
+        {filtered.length === 0 ? (
+          <div className="bg-[var(--card-bg)] border border-[var(--card-border)] rounded-2xl p-16 text-center">
+            <CheckCircle2 size={48} className="text-green-500 mx-auto mb-4"/>
+            <h2 className="text-xl font-bold mb-2">Queue is Clear!</h2>
+            <p className="text-gray-500">All questions have been reviewed. Great work.</p>
+          </div>
+        ) : filtered.map(q => {
+          const isExpanded = expanded === q.id;
+          const isSelected = selected.includes(q.id);
+          const level = getLevelLabel(q.level || 5);
+          return (
+            <div key={q.id}
+              className={`bg-[var(--card-bg)] border rounded-2xl overflow-hidden transition-all ${isSelected ? 'border-purple-500/50 bg-purple-500/5' : 'border-[var(--card-border)]'}`}>
+              <div className="p-5">
+                <div className="flex items-start gap-4">
+                  <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(q.id)}
+                    className="mt-1 w-4 h-4 rounded accent-purple-500 cursor-pointer shrink-0"/>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {q.subject && (
+                        <span className="text-xs font-bold bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded">
+                          {q.subject}
+                        </span>
+                      )}
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${level.color}`}>
+                        {level.label}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">
+                        {q.id.substring(0, 12)}...
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(q.created_at).toLocaleDateString('en-IN')}
+                      </span>
+                      {q.language_code && q.language_code !== 'en' && (
+                        <span className="text-xs bg-orange-500/10 text-orange-500 px-2 py-0.5 rounded uppercase font-bold">
+                          {q.language_code}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-sm font-medium leading-relaxed line-clamp-2">
+                      {q.question_text || 'No question text available'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => setExpanded(isExpanded ? null : q.id)}
+                      className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl transition-colors"
+                      title="Preview full question">
+                      {isExpanded ? <ChevronUp size={16}/> : <Eye size={16}/>}
+                    </button>
+                    <button onClick={() => approve(q.id)}
+                      className="px-4 py-2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-1.5">
+                      <CheckCircle2 size={14}/> Approve
+                    </button>
+                    <button onClick={() => { setRejectingId(q.id); setRejectReason(''); }}
+                      className="px-4 py-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-1.5">
+                      <XCircle size={14}/> Reject
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="mt-4 border-t border-[var(--card-border)] pt-4 space-y-3">
+                    {q.question_text && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Full Question</p>
+                        <p className="text-sm bg-[var(--background)] rounded-xl p-3">{q.question_text}</p>
+                      </div>
+                    )}
+
+                    {/* Options */}
+                    {(q.option_a || q.options) && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-2">Options</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {q.option_a && ['option_a','option_b','option_c','option_d'].map((opt, idx) => (
+                            <div key={opt} className={`text-sm p-2 rounded-xl border ${
+                              q.correct_answer === String.fromCharCode(65+idx).toLowerCase()
+                                ? 'bg-green-500/10 border-green-500/40 font-bold text-green-700'
+                                : 'bg-[var(--background)] border-[var(--card-border)]'
+                            }`}>
+                              <span className="font-bold mr-2">{String.fromCharCode(65+idx)}.</span>
+                              {q[opt]}
+                              {q.correct_answer === String.fromCharCode(65+idx).toLowerCase() && (
+                                <span className="ml-1 text-green-500">✓</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {q.explanation && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Explanation</p>
+                        <p className="text-sm bg-blue-500/5 border border-blue-500/20 rounded-xl p-3">{q.explanation}</p>
+                      </div>
+                    )}
+
+                    {q.hint && (
+                      <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase mb-1">Hint</p>
+                        <p className="text-sm text-gray-600 bg-[var(--background)] rounded-xl p-3">{q.hint}</p>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      {q.syllabus_version && <div className="bg-[var(--background)] rounded-xl p-2"><span className="text-gray-400">Syllabus: </span><span className="font-bold">{q.syllabus_version}</span></div>}
+                      {q.quality_score && <div className="bg-[var(--background)] rounded-xl p-2"><span className="text-gray-400">Quality: </span><span className="font-bold">{Math.round(q.quality_score * 100)}%</span></div>}
+                      {q.generated_by && <div className="bg-[var(--background)] rounded-xl p-2 truncate"><span className="text-gray-400">Source: </span><span className="font-bold">{q.generated_by.split('/').pop()?.substring(0, 20)}</span></div>}
+                    </div>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="p-4 border-t border-[var(--card-border)] flex items-center justify-between bg-[var(--background)]/50">
-            <span className="text-sm text-gray-500">Page {page + 1} of {totalPages}</span>
-            <div className="flex gap-2">
-              <button disabled={page === 0} onClick={() => setPage(p => p - 1)} className="p-2 rounded-lg border border-[var(--card-border)] disabled:opacity-50 hover:bg-white/5"><ChevronLeft size={18} /></button>
-              <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} className="p-2 rounded-lg border border-[var(--card-border)] disabled:opacity-50 hover:bg-white/5"><ChevronRight size={18} /></button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* FLOATING BULK ACTION BAR */}
-      {selectedIds.length > 0 && activeTab === 'list' && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-40 animate-fade-up border border-slate-700">
-          <div className="flex items-center gap-2 font-bold"><CheckSquare size={20} className="text-blue-400" /> {selectedIds.length} Questions Selected</div>
-          <div className="h-6 w-px bg-slate-700"></div>
-          <div className="flex gap-2">
-            <button onClick={handleBulkReject} disabled={bulkLoading} className="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500 hover:text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50">
-              {bulkLoading ? <RefreshCw className="animate-spin" size={16}/> : <XCircle size={16}/>} Reject All
-            </button>
-            <button onClick={handleBulkApprove} disabled={bulkLoading} className="px-4 py-2 bg-green-500/20 text-green-400 hover:bg-green-500 hover:text-white rounded-xl text-sm font-bold flex items-center gap-2 transition-colors disabled:opacity-50">
-              {bulkLoading ? <RefreshCw className="animate-spin" size={16}/> : <CheckCircle2 size={16}/>} Approve All
-            </button>
-          </div>
-          <button onClick={() => setSelectedIds([])} className="text-gray-400 hover:text-white ml-2">✕</button>
-        </div>
-      )}
-
-      {/* REJECT MODAL */}
-      {rejecting && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-up">
-          <div className="bg-[var(--background)] border border-[var(--card-border)] p-8 rounded-3xl max-w-lg w-full shadow-2xl">
-            <h3 className="text-xl font-bold mb-2 flex items-center gap-2"><MessageSquare className="text-red-500"/> Reject & Comment</h3>
-            <div className="space-y-4 mb-6 mt-4">
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Category</label>
-                <select value={rejectCategory} onChange={e => setRejectCategory(e.target.value)} className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-3 focus:outline-none focus:border-red-500">
-                  <option value="math_error">Math / Logic Error</option>
-                  <option value="bad_story">Bad / Irrelevant Story</option>
-                  <option value="wrong_answer">Wrong Answer Key</option>
-                  <option value="formatting">Formatting Issue</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1 block">Comment / Correction</label>
-                <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="E.g., The math in the explanation is wrong..." className="w-full bg-[var(--card-bg)] border border-[var(--card-border)] rounded-xl p-4 h-32 focus:outline-none focus:border-red-500 resize-none" />
               </div>
             </div>
-            <div className="flex gap-4">
-              <button onClick={() => setRejecting(false)} className="flex-1 py-3 rounded-xl hover:bg-gray-500/10 font-semibold text-gray-500">Cancel</button>
-              <button onClick={() => handleAction('reject')} className="flex-1 py-3 rounded-xl bg-red-500 text-white font-semibold hover:bg-red-600 shadow-lg shadow-red-500/30">Confirm Reject</button>
-            </div>
+          );
+        })}
+      </div>
+
+      {filtered.length > 0 && (
+        <div className="text-center">
+          <p className="text-sm text-gray-500">Showing {filtered.length} questions · Select all and bulk approve to process faster</p>
+          <div className="flex justify-center gap-3 mt-3">
+            <button onClick={selectAll}
+              className="px-6 py-2 bg-purple-500/10 text-purple-500 hover:bg-purple-500 hover:text-white rounded-xl text-sm font-bold transition-colors">
+              Select All {filtered.length} Questions
+            </button>
           </div>
         </div>
       )}
