@@ -95,7 +95,7 @@ export default function AnalyticsDashboard() {
     // Questions by subject
     const subjectCounts: Record<string, number> = {};
     questions.forEach(q => { 
-  const subKey = q.subject_name || q.subject_id || 'Unknown';
+  const subKey = q.subject_name || 'Unknown';
   subjectCounts[subKey] = (subjectCounts[subKey] || 0) + 1; 
       });
     // Weekly signups
