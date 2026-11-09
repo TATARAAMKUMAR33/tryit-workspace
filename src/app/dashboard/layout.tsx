@@ -8,6 +8,7 @@ import {
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns,
   Target, Camera, X, CalendarDays, Database
 } from 'lucide-react';
+import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { supabase } from '@/lib/supabase';
 import GlobalSearch from '@/components/GlobalSearch';
 import EscalationAlerts from '@/components/EscalationAlerts';
@@ -38,18 +39,18 @@ const rolePermissions: Record<string, string[]> = {
     '/dashboard/hr', '/dashboard/chat', '/dashboard/knowledge',
     '/dashboard/performance', '/dashboard/verification', '/dashboard/expenses',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
-    '/dashboard/calendar', '/dashboard/sprints'
+    '/dashboard/calendar', '/dashboard/sprints','/dashboard/mentors'
   ],
   finance: [
     '/dashboard', '/dashboard/billing', '/dashboard/expenses',
     '/dashboard/disputes', '/dashboard/hr', '/dashboard/feed',
-    '/dashboard/profile', '/dashboard/calendar', '/dashboard/analytics'
+    '/dashboard/profile', '/dashboard/calendar', '/dashboard/analytics','/dashboard/mentors'
   ],
   content_lead: [
     '/dashboard', '/dashboard/qa', '/dashboard/content-ops',
     '/dashboard/knowledge', '/dashboard/chat', '/dashboard/moderation',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
-    '/dashboard/calendar', '/dashboard/questions'
+    '/dashboard/calendar', '/dashboard/questions','/dashboard/mentors'
   ],
   mentor: [
     '/dashboard', '/dashboard/qa', '/dashboard/chat',
@@ -91,6 +92,7 @@ const navItems = [
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, color: 'text-blue-600', bg: 'bg-blue-600/10' },
   { name: 'Calendar', href: '/dashboard/calendar', icon: CalendarDays, color: 'text-blue-500', bg: 'bg-blue-500/10' },
   { name: 'Question Bank', href: '/dashboard/questions', icon: Database, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+  { name: 'Mentor Hub', href: '/dashboard/mentors', icon: Star, color: 'text-yellow-500', bg: 'bg-yellow-500/10' },
   { name: 'My Profile', href: '/dashboard/profile', icon: UserCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
 ];
 
@@ -313,7 +315,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
-
+      
+      <KeyboardShortcuts />
       <QuickActions />
     </div>
   );
