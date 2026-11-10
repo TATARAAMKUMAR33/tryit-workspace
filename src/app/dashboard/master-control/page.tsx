@@ -1,8 +1,7 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Settings, UserCheck, RefreshCw, Mail, Eye, Shield, Clock, Activity, ChevronDown, ChevronUp, Users } from 'lucide-react';
-
+import { Settings, UserCheck, RefreshCw, Mail, Eye, Shield, Clock, Activity, ChevronDown, ChevronUp, Users, Trash2 } from 'lucide-react';
 const ALL_SECTIONS = [
   { path: '/dashboard', label: 'Dashboard' },
   { path: '/dashboard/feed', label: 'Live Ops Feed' },
@@ -278,16 +277,17 @@ const deleteStaff = async (email: string) => {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button onClick={() => sendLoginEmail(s.user_email)} disabled={sendingEmail === s.user_email}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-bold disabled:opacity-50">
-                      <Mail size={12}/> {sendingEmail === s.user_email ? 'Sending...' : 'Send Login Link'}
-                      <button onClick={() => resetPassword(s.user_email)}
+  className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-bold disabled:opacity-50">
+  <Mail size={12}/> {sendingEmail === s.user_email ? 'Sending...' : 'Send Login Link'}
+</button>
+<button onClick={() => resetPassword(s.user_email)}
   className="flex items-center gap-1 px-3 py-1.5 bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500 hover:text-white rounded-xl text-xs font-bold">
-  🔑 Reset Password
+  🔑 Reset
 </button>
 <button onClick={() => deleteStaff(s.user_email)}
   className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-colors">
   <Trash2 size={14}/>
-                    </button>
+</button>
                     <select value={s.role} onChange={e => changeRole(s.user_email, e.target.value)}
                       className="text-xs bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-2 py-1.5 focus:outline-none">
                       {ROLES.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
