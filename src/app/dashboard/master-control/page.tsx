@@ -91,6 +91,28 @@ export default function MasterControl() {
     }
     setSendingEmail(null);
   };
+  const resetPassword = async (email: string) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/login`
+  });
+  if (!error) {
+    setMessage(`✅ Password reset email sent to ${email}`);
+  } else {
+    setMessage(`⚠️ Could not send reset email: ${error.message}`);
+  }
+};
+
+const deleteStaff = async (email: string) => {
+  if (!confirm(`Permanently delete ${email}? This cannot be undone.`)) return;
+  await supabase.from('staff_roles').delete().eq('user_email', email);
+  await supabase.from('staff_section_access').delete().eq('user_email', email);
+  await supabase.from('leave_balances').delete().eq('user_email', email);
+  await supabase.from('audit_logs').insert([{
+    user_email: user, action: 'STAFF_DELETED', details: { deleted_email: email }
+  }]);
+  setMessage(`✅ ${email} deleted`);
+  fetchAll();
+};
 
   const createAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -258,6 +280,13 @@ export default function MasterControl() {
                     <button onClick={() => sendLoginEmail(s.user_email)} disabled={sendingEmail === s.user_email}
                       className="flex items-center gap-1 px-3 py-1.5 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl text-xs font-bold disabled:opacity-50">
                       <Mail size={12}/> {sendingEmail === s.user_email ? 'Sending...' : 'Send Login Link'}
+                      <button onClick={() => resetPassword(s.user_email)}
+  className="flex items-center gap-1 px-3 py-1.5 bg-yellow-500/10 text-yellow-600 hover:bg-yellow-500 hover:text-white rounded-xl text-xs font-bold">
+  🔑 Reset Password
+</button>
+<button onClick={() => deleteStaff(s.user_email)}
+  className="p-1.5 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-colors">
+  <Trash2 size={14}/>
                     </button>
                     <select value={s.role} onChange={e => changeRole(s.user_email, e.target.value)}
                       className="text-xs bg-[var(--background)] border border-[var(--card-border)] rounded-xl px-2 py-1.5 focus:outline-none">
