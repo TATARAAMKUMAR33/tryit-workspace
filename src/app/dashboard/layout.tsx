@@ -7,7 +7,9 @@ import {
   BookOpen, Flag, Briefcase, CreditCard, Terminal, BarChart2, UserCheck, Gavel,
   BarChart3, BellRing, AlertTriangle, ShieldX, Settings, Wallet, Bug, Columns,
   Target, Camera, X, CalendarDays, Database,Star,
-  ClipboardList
+  ClipboardList, Scale, GitBranch,
+  Map, Eye, TrendingDown, StopCircle,
+  AlertOctagon
 } from 'lucide-react';
 import KeyboardShortcuts from '@/components/KeyboardShortcuts';
 import { supabase } from '@/lib/supabase';
@@ -41,18 +43,21 @@ const rolePermissions: Record<string, string[]> = {
     '/dashboard/performance', '/dashboard/verification', '/dashboard/expenses',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
     '/dashboard/calendar', '/dashboard/sprints','/dashboard/mentors',
-    '/dashboard/runbook', '/dashboard/decisions'
+    '/dashboard/runbook', '/dashboard/decisions','/dashboard/targets',
+    '/dashboard/incidents'
   ],
   finance: [
     '/dashboard', '/dashboard/billing', '/dashboard/expenses',
     '/dashboard/disputes', '/dashboard/hr', '/dashboard/feed',
-    '/dashboard/profile', '/dashboard/calendar', '/dashboard/analytics','/dashboard/mentors'
+    '/dashboard/profile', '/dashboard/calendar', '/dashboard/analytics','/dashboard/mentors','/dashboard/reconciliation',
+    '/dashboard/leakage'
   ],
   content_lead: [
     '/dashboard', '/dashboard/qa', '/dashboard/content-ops',
     '/dashboard/knowledge', '/dashboard/chat', '/dashboard/moderation',
     '/dashboard/feed', '/dashboard/pulse', '/dashboard/profile',
-    '/dashboard/calendar', '/dashboard/questions','/dashboard/mentors','/dashboard/decisions'
+    '/dashboard/calendar', '/dashboard/questions','/dashboard/mentors','/dashboard/decisions',
+    '/dashboard/content-gaps','/dashboard/disputes-q','/dashboard/pipeline'
   ],
   mentor: [
     '/dashboard', '/dashboard/qa', '/dashboard/chat',
@@ -98,6 +103,14 @@ const navItems = [
   { name: 'Decisions Log', href: '/dashboard/decisions', icon: BookOpen, color: 'text-blue-600', bg: 'bg-blue-600/10' },
   { name: 'Runbook', href: '/dashboard/runbook', icon: ClipboardList, color: 'text-teal-500', bg: 'bg-teal-500/10' },
   { name: 'My Profile', href: '/dashboard/profile', icon: UserCircle, color: 'text-blue-400', bg: 'bg-blue-400/10' },
+  { name: 'Question Disputes', href: '/dashboard/disputes-q', icon: Flag, color: 'text-red-400', bg: 'bg-red-400/10' },
+ { name: 'Exam Incidents', href: '/dashboard/incidents', icon: AlertOctagon, color: 'text-orange-500', bg: 'bg-orange-500/10' },
+ { name: 'Reconciliation', href: '/dashboard/reconciliation', icon: Scale, color: 'text-green-600', bg: 'bg-green-600/10' },
+ { name: 'Staff Targets', href: '/dashboard/targets', icon: Target, color: 'text-blue-600', bg: 'bg-blue-600/10' },
+ { name: 'Pipeline Log', href: '/dashboard/pipeline', icon: GitBranch, color: 'text-teal-500', bg: 'bg-teal-500/10' },
+ { name: 'Content Gaps', href: '/dashboard/content-gaps', icon: Map, color: 'text-blue-500', bg: 'bg-blue-500/10' },
+ { name: 'View As Staff', href: '/dashboard/impersonate', icon: Eye, color: 'text-purple-500', bg: 'bg-purple-500/10' },
+{ name: 'Revenue Leakage', href: '/dashboard/leakage', icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-600/10' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
