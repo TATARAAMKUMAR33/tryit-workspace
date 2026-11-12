@@ -26,16 +26,15 @@ export default function QAInspector() {
   const fetchQuestions = async () => {
     setLoading(true);
     let q = supabase.from('questions').select('*')
-      .eq('verified', false)
-      .order('created_at', { ascending: true })
-      .limit(100);
+  .order('created_at', { ascending: false })
+  .limit(100);
 
-    if (filterSubject !== 'all') q = q.eq('subject', filterSubject);
-    if (filterLevel !== 'all') q = q.eq('level', Number(filterLevel));
+  if (filterStatus === 'verified') q = q.eq('verified', true);
+  if (filterStatus === 'pending') q = q.eq('verified', false);
 
     const [{ data }, subData, myStats] = await Promise.all([
-      q,
-      supabase.from('questions').select('subject').eq('verified', false),
+  q,
+  supabase.from('questions').select('subject_id').limit(1000),
       supabase.from('qa_votes').select('id, vote')
         .eq('voter_email', user)
         .gte('created_at', new Date(new Date().setHours(0,0,0,0)).toISOString()),
