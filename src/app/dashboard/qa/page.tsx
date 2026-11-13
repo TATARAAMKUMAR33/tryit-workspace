@@ -600,14 +600,44 @@ export default function QAInspector() {
                 </div>
 
                 {/* Explanation */}
-                {q.explanation ? (
-                  <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Explanation</p>
-                    <p className="text-sm bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 leading-relaxed">
-                      {q.explanation}
-                    </p>
-                  </div>
-                ) : (
+{q.explanation ? (
+  <div>
+    <p className="text-xs font-bold text-gray-400 uppercase mb-1">Explanation</p>
+    <div className="text-sm bg-blue-500/5 border border-blue-500/20 rounded-xl p-4 leading-relaxed space-y-2">
+      {(() => {
+        const exp = q.explanation;
+        // Handle JSON object explanation
+        if (typeof exp === 'object' && exp !== null) {
+          return Object.entries(exp).map(([key, val]) => (
+            <div key={key}>
+              <span className="text-xs font-bold text-blue-500 uppercase">
+                {key.replace(/_/g, ' ')}:
+              </span>
+              <span className="ml-1 text-gray-600">{String(val)}</span>
+            </div>
+          ));
+        }
+        // Try parse if string JSON
+        if (typeof exp === 'string') {
+          try {
+            const parsed = JSON.parse(exp);
+            if (typeof parsed === 'object') {
+              return Object.entries(parsed).map(([key, val]) => (
+                <div key={key}>
+                  <span className="text-xs font-bold text-blue-500 uppercase">
+                    {key.replace(/_/g, ' ')}:
+                  </span>
+                  <span className="ml-1 text-gray-600">{String(val)}</span>
+                </div>
+              ));
+            }
+          } catch {}
+          return <p>{exp}</p>;
+        }
+        return <p>{String(exp)}</p>;
+      })()}
+    </div>
+  </div>                ) : (
                   <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-3">
                     <p className="text-xs text-orange-500 font-bold">
                       ⚠️ No explanation stored for this question.
