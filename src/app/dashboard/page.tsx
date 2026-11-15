@@ -29,6 +29,7 @@ export default function Dashboard() {
     const today = new Date().toISOString().split('T')[0];
     const todayStart = new Date(); todayStart.setHours(0,0,0,0);
 
+    try {
     const [
       qTotal, qPending, tickets, staff,
       mentorQ, revenue, exams, dropout,
@@ -50,6 +51,9 @@ export default function Dashboard() {
     ]);
 
     const totalRevenue = revenue.data?.reduce((s, i) => s + Number(i.amount), 0) || 0;
+    } catch (err) {
+      console.error('Dashboard Fetch Error:', err);
+    }
 
     setStats({
       totalQuestions: qTotal.count || 0,
